@@ -6,7 +6,7 @@ import ReadingSection from "./components/exam/ReadingSection";
 import WritingSection from "./components/exam/WritingSection";
 import type { ExamTab, AnswersMap } from "./components/exam/types";
 import type { StudentInfo } from "./types";
-import type { ExamDTO, ResultDTO, AnswerInput } from "@riwi/shared";
+import type { ExamDTO, ResultDTO, AnswerInput } from "@jteban1/shared";
 import { fetchExam, fetchLtiSession, submitExam } from "./api";
 import {
   AlarmClock, Send, ChevronRight, HelpCircle, GraduationCap,
@@ -298,7 +298,9 @@ export default function App() {
 
   const readingQuestions = examData?.questions.filter((q) => q.skill === "reading") ?? [];
   const writingQuestions = examData?.questions.filter((q) => q.skill === "writing") ?? [];
-  const readingAnswered = readingQuestions.filter((q) => answers[q.id]?.selectedKey).length;
+  const readingAnswered = readingQuestions.filter((q) =>
+    q.type === "open" ? (answers[q.id]?.text ?? "").trim() : answers[q.id]?.selectedKey
+  ).length;
   const writingAnswered = writingQuestions.filter((q) => (answers[q.id]?.text ?? "").trim()).length;
 
   // ── Gates ─────────────────────────────────────────────────────────────────
@@ -527,6 +529,7 @@ export default function App() {
               questions={readingQuestions}
               answers={answers}
               updateMcq={updateMcq}
+              updateText={updateText}
               setActiveTab={setActiveTab}
             />
           )}
