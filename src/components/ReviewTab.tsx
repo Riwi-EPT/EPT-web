@@ -1,4 +1,4 @@
-import type { ResultDTO } from "@riwi/shared";
+import type { ResultDTO } from "@jteban1/shared";
 import { Award, Printer, RefreshCw, BookOpen, FileText } from "lucide-react";
 
 interface ReviewTabProps {
@@ -34,10 +34,22 @@ function ScoreBar({ label, score, max, percentage, icon }: {
 
 export default function ReviewTab({ result, onReset }: ReviewTabProps) {
   const { studentInfo, reading, writing, overall } = result;
+  const issuedDate = studentInfo.date ?? new Date().toLocaleDateString();
 
   return (
-    <div className="space-y-6">
-      {/* Overall card */}
+    <div id="placement-review-wrapper" className="space-y-6">
+      <div id="efset-certificate-sheet" className="space-y-6">
+        {/* Certificate header — visible only when printing */}
+        <div className="hidden print:block text-center pb-4 mb-2 border-b-2 border-slate-900">
+          <h1 className="text-2xl font-black tracking-tight">English Placement Certificate</h1>
+          <p className="text-[11px] uppercase tracking-widest mt-1">RIWI · English Placement Test</p>
+          <p className="text-sm mt-3 font-semibold">{studentInfo.name}</p>
+          <p className="text-xs">
+            {studentInfo.email} · Issued {issuedDate}
+          </p>
+        </div>
+
+        {/* Overall card */}
       <div className="bg-slate-900 text-white rounded-2xl p-6 md:p-8 relative overflow-hidden">
         <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-48 h-48 bg-indigo-600 rounded-full opacity-20 blur-3xl" />
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative">
@@ -98,9 +110,16 @@ export default function ReviewTab({ result, onReset }: ReviewTabProps) {
         </div>
       )}
 
-      <p className="text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg p-4">
-        {result.summary}
-      </p>
+        <p className="text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg p-4">
+          {result.summary}
+        </p>
+
+        {/* Signature footer — visible only when printing */}
+        <div className="hidden print:flex justify-between pt-12 mt-6 text-xs text-slate-700">
+          <div className="border-t border-slate-900 pt-1 w-52 text-center">Authorized Examiner</div>
+          <div className="border-t border-slate-900 pt-1 w-52 text-center">Date: {issuedDate}</div>
+        </div>
+      </div>
 
       <div className="flex justify-end gap-3 print:hidden">
         <button
