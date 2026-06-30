@@ -13,8 +13,6 @@ export interface ReadingSectionProps {
   questions: QuestionDTO[];
   answers: AnswersMap;
   updateMcq: (questionId: number, key: string) => void;
-  /** Free-text answer for open reading questions. */
-  updateText: (questionId: number, text: string) => void;
   setActiveTab: (tab: ExamTab) => void;
 }
 
