@@ -298,9 +298,7 @@ export default function App() {
 
   const readingQuestions = examData?.questions.filter((q) => q.skill === "reading") ?? [];
   const writingQuestions = examData?.questions.filter((q) => q.skill === "writing") ?? [];
-  const readingAnswered = readingQuestions.filter((q) =>
-    q.type === "open" ? (answers[q.id]?.text ?? "").trim() : answers[q.id]?.selectedKey
-  ).length;
+  const readingAnswered = readingQuestions.filter((q) => answers[q.id]?.selectedKey).length;
   const writingAnswered = writingQuestions.filter((q) => (answers[q.id]?.text ?? "").trim()).length;
 
   // ── Gates ─────────────────────────────────────────────────────────────────
@@ -529,7 +527,6 @@ export default function App() {
               questions={readingQuestions}
               answers={answers}
               updateMcq={updateMcq}
-              updateText={updateText}
               setActiveTab={setActiveTab}
             />
           )}

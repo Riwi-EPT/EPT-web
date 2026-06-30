@@ -370,7 +370,6 @@ function QuestionForm({
   const set = (patch: Partial<AdminQuestionDTO>) => onChange({ ...value, ...patch });
   const isMcq = value.type === "mcq";
   const isEssay = value.type === "essay";
-  const isOpen = value.type === "open";
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -394,7 +393,6 @@ function QuestionForm({
             className="form-input"
           >
             <option value="mcq">mcq</option>
-            <option value="open">open</option>
             <option value="essay">essay</option>
           </select>
         </Field>
@@ -422,24 +420,15 @@ function QuestionForm({
           <Field label="Word max">
             <input type="number" value={value.wordMax ?? ""} onChange={(e) => set({ wordMax: e.target.value ? Number(e.target.value) : null })} className="form-input" />
           </Field>
+          <div className="col-span-2">
+            <Field label="Rubric / reference for the NLP grader (optional)">
+              <textarea value={value.rubric ?? ""} onChange={(e) => set({ rubric: e.target.value })} rows={2} className="form-input" />
+            </Field>
+          </div>
         </div>
       )}
 
-      {/* Rubric: required for open (NLP-graded), optional reference for essays */}
-      {(isEssay || isOpen) && (
-        <Field
-          label={
-            isOpen
-              ? "Rubric / reference answer (required — open questions are NLP-graded)"
-              : "Rubric / reference for the NLP grader (optional)"
-          }
-        >
-          <textarea value={value.rubric ?? ""} onChange={(e) => set({ rubric: e.target.value })} rows={2} className="form-input" />
-        </Field>
-      )}
-
-      {/* Options: MCQ choices (with correct) or essay topics. Open questions have none. */}
-      {!isOpen && (
+      {/* Options: MCQ choices (with correct) or essay topics */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400">
@@ -498,7 +487,6 @@ function QuestionForm({
           </div>
         ))}
       </div>
-      )}
 
       <div className="flex justify-end gap-3 pt-2">
         <button onClick={onCancel} className="px-4 py-2 text-xs font-semibold text-slate-600 cursor-pointer">
