@@ -1,4 +1,4 @@
-import type { ExamDTO, ResultDTO, SubmitRequest } from "@riwi/shared";
+import type { ExamDTO, ResultDTO, SubmitRequest } from "@jteban1/shared";
 
 // In dev, requests are relative and proxied to the API by Vite. In production,
 // set VITE_API_BASE_URL to the API origin (the API allows it via CORS).

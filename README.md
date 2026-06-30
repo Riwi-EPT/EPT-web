@@ -6,8 +6,9 @@ sanitized data from `riwi-api`; it never receives answer keys.
 
 ## Prerequisites
 - Node.js 20+
-- `riwi-shared` checked out as a sibling folder (`../riwi-shared`), built once. The dependency is
-  `"@riwi/shared": "file:../riwi-shared"` until it is published to a private registry.
+- The shared contract is consumed from **GitHub Packages** as `"@jteban1/shared": "^0.1.0"` (no
+  longer a `file:` sibling). Installing it requires auth: a GitHub token with `read:packages`
+  exported as `NODE_AUTH_TOKEN` (the repo's `.npmrc` reads it). See `EPT-shared/README.md`.
 - `riwi-api` running (default `http://localhost:3000`).
 
 ## Setup
