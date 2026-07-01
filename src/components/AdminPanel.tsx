@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import type { AdminQuestionDTO, AdminVersionDTO, Skill, QuestionType } from "@jteban1/shared";
 import {
-  X, KeyRound, LogOut, Layers, Database, Plus, Trash2, CheckCircle, Save,
-  Star, Unlock, RefreshCw, ShieldCheck,
+  X, KeyRound, LogOut, Layers, Database, Plus, Trash2, Save,
+  Star, Unlock, RefreshCw, ShieldCheck, AlertTriangle,
 } from "lucide-react";
 import {
   adminLogin, adminLogout, adminSession,
@@ -20,12 +20,12 @@ interface AdminPanelProps {
 
 type Tab = "questions" | "access";
 
-function emptyQuestion(versionId: number): AdminQuestionDTO {
+function emptyQuestion(versionId: number, nextNumber = 1): AdminQuestionDTO {
   return {
     versionId,
     skill: "reading",
     type: "mcq",
-    number: 1,
+    number: nextNumber,
     prompt: "",
     passageText: "",
     rubric: "",
@@ -59,6 +59,14 @@ export default function AdminPanel({
 
   const [newVersionCode, setNewVersionCode] = useState("");
   const [unlockInput, setUnlockInput] = useState(currentStudentEmail ?? "");
+
+  // Pending action awaiting confirmation.
+  const [confirm, setConfirm] = useState<{
+    message: string;
+    onConfirm: () => void;
+    confirmLabel?: string;
+    tone?: "danger" | "primary";
+  } | null>(null);
 
   useEffect(() => {
     adminSession().then((s) => setIsAuthed(s.isAdmin)).catch(() => setIsAuthed(false));
@@ -103,6 +111,24 @@ export default function AdminPanel({
   const handleSaveQuestion = async () => {
     if (!editing) return;
     setError(null);
+
+    // Client-side validation before hitting the API.
+    if (!editing.prompt.trim()) {
+      setError("Prompt is required.");
+      return;
+    }
+    if (editing.type === "mcq") {
+      const filled = editing.options.filter((o) => o.text.trim());
+      if (filled.length < 2) {
+        setError("Multiple-choice questions need at least two options.");
+        return;
+      }
+      if (!editing.options.some((o) => o.isCorrect && o.text.trim())) {
+        setError("Select the correct option.");
+        return;
+      }
+    }
+
     try {
       if (editing.id) await updateQuestion(editing.id, editing);
       else await createQuestion(editing);
@@ -117,6 +143,17 @@ export default function AdminPanel({
     if (!id) return;
     await deleteQuestion(id).catch((e) => setError(String(e)));
     await refreshQuestions();
+  };
+
+  const handleDeleteVersion = async (id: number) => {
+    setError(null);
+    try {
+      await deleteVersion(id);
+      if (selectedVersionId === id) setSelectedVersionId(null);
+      await loadVersions();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not delete version.");
+    }
   };
 
   const handleAddVersion = async () => {
@@ -167,6 +204,7 @@ export default function AdminPanel({
 
   // ── Authenticated panel ───────────────────────────────────────────────────────
   return (
+    <>
     <Overlay onClose={onClose} wide>
       <div className="flex flex-col h-[80vh] w-full">
         {/* Header */}
@@ -237,14 +275,28 @@ export default function AdminPanel({
                     <div className="flex gap-2 mt-1.5">
                       {!v.isActive && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); activateVersion(v.id).then(loadVersions); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirm({
+                              message: `Make version "${v.code}" the active exam? Students will immediately receive this version.`,
+                              confirmLabel: "Activate",
+                              tone: "primary",
+                              onConfirm: () => { activateVersion(v.id).then(loadVersions); },
+                            });
+                          }}
                           className="text-[10px] text-indigo-600 hover:underline cursor-pointer"
                         >
                           Activate
                         </button>
                       )}
                       <button
-                        onClick={(e) => { e.stopPropagation(); deleteVersion(v.id).then(loadVersions); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirm({
+                            message: `Delete version "${v.code}" and all of its questions? This cannot be undone.`,
+                            onConfirm: () => handleDeleteVersion(v.id),
+                          });
+                        }}
                         className="text-[10px] text-rose-500 hover:underline cursor-pointer"
                       >
                         Delete
@@ -284,7 +336,15 @@ export default function AdminPanel({
                         Questions ({questions.length})
                       </h3>
                       <button
-                        onClick={() => selectedVersionId != null && setEditing(emptyQuestion(selectedVersionId))}
+                        onClick={() =>
+                          selectedVersionId != null &&
+                          setEditing(
+                            emptyQuestion(
+                              selectedVersionId,
+                              questions.reduce((m, q) => Math.max(m, q.number), 0) + 1,
+                            ),
+                          )
+                        }
                         disabled={selectedVersionId == null}
                         className="flex items-center gap-1 text-xs font-bold bg-slate-900 text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 cursor-pointer disabled:opacity-40"
                       >
@@ -307,7 +367,15 @@ export default function AdminPanel({
                             <button onClick={() => setEditing(q)} className="text-xs text-indigo-600 hover:underline cursor-pointer">
                               Edit
                             </button>
-                            <button onClick={() => handleDeleteQuestion(q.id)} className="text-slate-400 hover:text-rose-600 cursor-pointer">
+                            <button
+                              onClick={() =>
+                                setConfirm({
+                                  message: `Delete question #${q.number}? This cannot be undone.`,
+                                  onConfirm: () => handleDeleteQuestion(q.id),
+                                })
+                              }
+                              className="text-slate-400 hover:text-rose-600 cursor-pointer"
+                            >
                               <Trash2 size={14} />
                             </button>
                           </div>
@@ -352,6 +420,73 @@ export default function AdminPanel({
         </div>
       </div>
     </Overlay>
+    {confirm && (
+      <ConfirmDialog
+        message={confirm.message}
+        confirmLabel={confirm.confirmLabel}
+        tone={confirm.tone}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => {
+          confirm.onConfirm();
+          setConfirm(null);
+        }}
+      />
+    )}
+    </>
+  );
+}
+
+// ── Confirmation dialog ───────────────────────────────────────────────────────
+function ConfirmDialog({
+  message,
+  onConfirm,
+  onCancel,
+  confirmLabel = "Delete",
+  tone = "danger",
+}: {
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  confirmLabel?: string;
+  tone?: "danger" | "primary";
+}) {
+  const isDanger = tone === "danger";
+  return (
+    <div
+      className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white rounded-xl border border-slate-200 shadow-xl w-full max-w-sm p-6 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <div className={`shrink-0 mt-0.5 ${isDanger ? "text-rose-600" : "text-indigo-600"}`}>
+            {isDanger ? <AlertTriangle size={20} /> : <Star size={20} />}
+          </div>
+          <div className="space-y-1">
+            <h3 className="font-bold text-slate-900 text-sm">Please confirm</h3>
+            <p className="text-xs text-slate-600">{message}</p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-xs font-semibold text-slate-600 cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className={`flex items-center gap-1.5 px-4 py-2 text-white text-xs font-bold rounded-lg cursor-pointer ${
+              isDanger ? "bg-rose-600 hover:bg-rose-700" : "bg-indigo-600 hover:bg-indigo-700"
+            }`}
+          >
+            {isDanger ? <Trash2 size={13} /> : <Star size={13} />} {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -370,6 +505,11 @@ function QuestionForm({
   const set = (patch: Partial<AdminQuestionDTO>) => onChange({ ...value, ...patch });
   const isMcq = value.type === "mcq";
   const isEssay = value.type === "essay";
+
+  // Keys are always sequential (a, b, c…) and derived from position,
+  // so authors never have to manage them by hand.
+  const reletter = (opts: AdminQuestionDTO["options"]) =>
+    opts.map((o, i) => ({ ...o, key: String.fromCharCode(97 + i) }));
 
   return (
     <div className="space-y-4 max-w-2xl">
@@ -408,9 +548,11 @@ function QuestionForm({
         <textarea value={value.prompt} onChange={(e) => set({ prompt: e.target.value })} rows={2} className="form-input" />
       </Field>
 
-      <Field label="Passage (optional, reading)">
-        <textarea value={value.passageText ?? ""} onChange={(e) => set({ passageText: e.target.value })} rows={3} className="form-input" />
-      </Field>
+      {value.skill === "reading" && (
+        <Field label="Passage (optional, reading)">
+          <textarea value={value.passageText ?? ""} onChange={(e) => set({ passageText: e.target.value })} rows={3} className="form-input" />
+        </Field>
+      )}
 
       {isEssay && (
         <div className="grid grid-cols-2 gap-3">
@@ -437,10 +579,7 @@ function QuestionForm({
           <button
             onClick={() =>
               set({
-                options: [
-                  ...value.options,
-                  { key: String.fromCharCode(97 + value.options.length), text: "", isCorrect: false },
-                ],
+                options: reletter([...value.options, { key: "", text: "", isCorrect: false }]),
               })
             }
             className="text-xs text-indigo-600 flex items-center gap-1 cursor-pointer"
@@ -448,6 +587,11 @@ function QuestionForm({
             <Plus size={12} /> Add
           </button>
         </div>
+        {isMcq && (
+          <p className="text-[11px] text-slate-400">
+            Select the radio next to the correct answer.
+          </p>
+        )}
         {value.options.map((opt, i) => (
           <div key={i} className="flex items-center gap-2">
             {isMcq && (
@@ -458,29 +602,26 @@ function QuestionForm({
                 onChange={() =>
                   set({ options: value.options.map((o, j) => ({ ...o, isCorrect: j === i })) })
                 }
-                title="Correct answer"
-                className="cursor-pointer"
+                title="Mark as correct answer"
+                className="cursor-pointer shrink-0"
               />
             )}
-            <input
-              value={opt.key}
-              onChange={(e) =>
-                set({ options: value.options.map((o, j) => (j === i ? { ...o, key: e.target.value } : o)) })
-              }
-              className="form-input w-16"
-              placeholder="key"
-            />
+            <span className="w-7 h-7 flex items-center justify-center rounded-md bg-slate-100 text-xs font-bold text-slate-500 uppercase shrink-0">
+              {opt.key}
+            </span>
             <input
               value={opt.text}
               onChange={(e) =>
                 set({ options: value.options.map((o, j) => (j === i ? { ...o, text: e.target.value } : o)) })
               }
               className="form-input flex-1"
-              placeholder="text"
+              placeholder={isMcq ? "Answer text" : "Topic text"}
             />
             <button
-              onClick={() => set({ options: value.options.filter((_, j) => j !== i) })}
-              className="text-slate-400 hover:text-rose-600 cursor-pointer"
+              onClick={() => set({ options: reletter(value.options.filter((_, j) => j !== i)) })}
+              disabled={value.options.length <= 1}
+              className="text-slate-400 hover:text-rose-600 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Remove option"
             >
               <Trash2 size={14} />
             </button>
