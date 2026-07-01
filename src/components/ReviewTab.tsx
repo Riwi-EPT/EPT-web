@@ -134,7 +134,7 @@ export default function ReviewTab({ result, onReset }: ReviewTabProps) {
           className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-colors cursor-pointer flex items-center gap-1.5"
         >
           <RefreshCw size={14} />
-          New Candidate
+          Try again
         </button>
       </div>
     </div>
