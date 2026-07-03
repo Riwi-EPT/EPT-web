@@ -7,7 +7,7 @@ import WritingSection from "./components/exam/WritingSection";
 import type { ExamTab, AnswersMap } from "./components/exam/types";
 import type { StudentInfo } from "./types";
 import type { ExamDTO, ResultDTO, AnswerInput } from "@jteban1/shared";
-import { fetchExam, fetchLtiSession, submitExam } from "./api";
+import { fetchExam, submitExam, setExamToken, decodeExamToken, ApiError } from "./api";
 import {
   AlarmClock, Send, ChevronRight, HelpCircle, GraduationCap,
   Sparkles, ShieldAlert, Settings, BookOpen, FileText,
@@ -36,6 +36,31 @@ const BLOCKED_KEY = "riwi_placement_blocked_emails_v1";
 function wordCount(text: string): number {
   if (!text || !text.trim()) return 0;
   return text.trim().split(/\s+/).length;
+}
+
+// Capture the exam token handed over by the LTI launch (issue #9). It rides in
+// the URL fragment (#token=...); store it for the session, then scrub it from the
+// address bar so it isn't left in history.
+if (typeof window !== "undefined" && isLtiMode && window.location.hash.startsWith("#token=")) {
+  const token = decodeURIComponent(window.location.hash.slice("#token=".length));
+  if (token) {
+    setExamToken(token);
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }
+}
+
+// Human-readable remaining time for the server-side retake cooldown (issue #24).
+function formatRemaining(ms: number): string {
+  const totalMin = Math.ceil(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h} h ${m} min` : `${m} min`;
+}
+function cooldownMessage(err: ApiError): string {
+  const ms = (err.body as { remainingMs?: number } | null)?.remainingMs ?? 0;
+  return `Ya presentaste el examen recientemente. Debes esperar ${formatRemaining(
+    ms
+  )} antes de volver a intentarlo.`;
 }
 
 export default function App() {
@@ -95,27 +120,34 @@ export default function App() {
   useEffect(() => {
     fetchExam(examVersion)
       .then(setExamData)
-      .catch(() => setExamError("Could not load the exam. Please try again later."));
+      .catch((err) => {
+        // A 403 here is the server-side retake cooldown (issue #24).
+        if (err instanceof ApiError && err.status === 403) {
+          setExamError(cooldownMessage(err));
+        } else {
+          setExamError("Could not load the exam. Please try again later.");
+        }
+      });
   }, []);
 
-  // LTI bootstrap: pull pre-filled identity from the server session
+  // LTI bootstrap: identity now comes from the verified exam token (issue #9),
+  // decoded client-side for display — no session-cookie round-trip needed.
   useEffect(() => {
     if (!isLtiMode || studentInfo) return;
-    fetchLtiSession()
-      .then((data) =>
-        handleStartExam({
-          name: data.name,
-          email: data.email,
-          teacher: data.teacher,
-          date: new Date().toISOString().split("T")[0],
-          startedAt: null,
-          ltiMode: true,
-        })
-      )
-      .catch(() =>
-        setLtiError("No se pudo conectar con Moodle. Vuelve a abrir el examen desde tu curso.")
-      )
-      .finally(() => setLtiLoading(false));
+    const identity = decodeExamToken();
+    if (identity && identity.name) {
+      handleStartExam({
+        name: identity.name,
+        email: identity.email,
+        teacher: "Moodle LTI",
+        date: new Date().toISOString().split("T")[0],
+        startedAt: null,
+        ltiMode: true,
+      });
+    } else {
+      setLtiError("No se pudo validar tu sesión de Moodle. Vuelve a abrir el examen desde tu curso.");
+    }
+    setLtiLoading(false);
   }, []);
 
   // Persist progress
@@ -269,7 +301,7 @@ export default function App() {
     if (!studentInfo) return;
     setIsGrading(true);
     setGradingProgress("Scoring Reading answers...");
-    const t = setTimeout(() => setGradingProgress("Evaluating Writing with the local model..."), 2500);
+    const t = setTimeout(() => setGradingProgress("Evaluating your writing..."), 2500);
 
     const answerList: AnswerInput[] = Object.entries(answers).map(([id, a]) => ({
       questionId: Number(id),
@@ -283,7 +315,13 @@ export default function App() {
       setIsTimerRunning(false);
     } catch (error) {
       console.error(error);
-      setErrorMessage("There was an error grading your exam. Please click submit again.");
+      if (error instanceof ApiError && error.status === 403) {
+        // Server-side retake cooldown (issue #24).
+        setErrorMessage(cooldownMessage(error));
+        setIsTimerRunning(false);
+      } else {
+        setErrorMessage("There was an error grading your exam. Please click submit again.");
+      }
     } finally {
       clearTimeout(t);
       setIsGrading(false);
