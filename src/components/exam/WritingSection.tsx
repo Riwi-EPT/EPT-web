@@ -21,7 +21,7 @@ export default function WritingSection({
         <div>
           <h2 className="font-bold text-slate-900 text-base leading-none">Part 2 — Writing</h2>
           <span className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">
-            Evaluated by a local NLP model
+            Evaluated by an automated writing scorer
           </span>
         </div>
       </div>
