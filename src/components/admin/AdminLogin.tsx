@@ -2,18 +2,21 @@ import { useState } from "react";
 import { KeyRound } from "lucide-react";
 import Overlay from "./Overlay";
 
-// Teacher/admin login gate. Password is validated server-side (adminApi.adminLogin);
-// this component just collects it and surfaces the error.
+// Teacher/admin login gate. Credentials are validated server-side
+// (adminApi.adminLogin) against the users table; this component collects
+// email + password and surfaces the error.
 export default function AdminLogin({
   onClose,
   onSubmit,
   error,
 }: {
   onClose: () => void;
-  onSubmit: (password: string) => void;
+  onSubmit: (email: string, password: string) => void;
   error: string | null;
 }) {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const submit = () => onSubmit(email, password);
 
   return (
     <Overlay onClose={onClose}>
@@ -23,11 +26,21 @@ export default function AdminLogin({
           <h2 className="font-bold text-lg">Teacher / Admin Access</h2>
         </div>
         <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="Email"
+          autoComplete="username"
+          className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+        />
+        <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && onSubmit(password)}
-          placeholder="Admin password"
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder="Password"
+          autoComplete="current-password"
           className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
         />
         {error && <p className="text-xs text-rose-600">{error}</p>}
@@ -36,7 +49,7 @@ export default function AdminLogin({
             Cancel
           </button>
           <button
-            onClick={() => onSubmit(password)}
+            onClick={submit}
             className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 cursor-pointer"
           >
             Sign in

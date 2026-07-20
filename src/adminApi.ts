@@ -2,6 +2,21 @@ import type { AdminQuestionDTO, AdminVersionDTO } from "@jteban1/shared";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
+// Local mirror of the API's user shape (issue #10). Kept local until it's promoted
+// into @jteban1/shared; see riwi-api/src/db/users.ts (AdminUserDTO).
+export interface AdminUserDTO {
+  id: number;
+  email: string;
+  isAdmin: boolean;
+  isActive: boolean;
+}
+
+export interface AdminSession {
+  authenticated: boolean;
+  isAdmin: boolean;
+  email: string | null;
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     credentials: "include",
@@ -24,10 +39,22 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 // ── Auth ────────────────────────────────────────────────────────────────────
-export const adminLogin = (password: string) =>
-  req<{ ok: true }>("/api/admin/login", { method: "POST", body: JSON.stringify({ password }) });
+export const adminLogin = (email: string, password: string) =>
+  req<{ ok: true; isAdmin: boolean; email: string }>("/api/admin/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
 export const adminLogout = () => req<{ ok: true }>("/api/admin/logout", { method: "POST" });
-export const adminSession = () => req<{ isAdmin: boolean }>("/api/admin/session");
+export const adminSession = () => req<AdminSession>("/api/admin/session");
+
+// ── Users (admin-only) ────────────────────────────────────────────────────────
+export const listUsers = () => req<AdminUserDTO[]>("/api/admin/users");
+export const createUser = (email: string, password: string, isAdmin: boolean) =>
+  req<AdminUserDTO>("/api/admin/users", { method: "POST", body: JSON.stringify({ email, password, isAdmin }) });
+export const updateUser = (
+  id: number,
+  patch: { isActive?: boolean; isAdmin?: boolean; password?: string }
+) => req<{ ok: true }>(`/api/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
 
 // ── Versions ──────────────────────────────────────────────────────────────────
 export const listVersions = () => req<AdminVersionDTO[]>("/api/admin/versions");
