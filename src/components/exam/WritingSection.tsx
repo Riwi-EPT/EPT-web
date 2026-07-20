@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { FileText, ArrowLeft, Send } from "lucide-react";
 import type { WritingSectionProps } from "./types";
 
@@ -12,6 +13,17 @@ export default function WritingSection({
   setShowSubmitModal,
   setActiveTab,
 }: WritingSectionProps) {
+  // Persist the default topic (first option) for any task that offers topics but
+  // has no selection yet, so the recorded answer matches the pre-selected UI state.
+  useEffect(() => {
+    for (const q of questions) {
+      const topics = q.options ?? [];
+      if (topics.length > 0 && !answers[q.id]?.selectedKey) {
+        updateTopic(q.id, topics[0].key);
+      }
+    }
+  }, [questions, answers, updateTopic]);
+
   return (
     <div className="flex flex-col h-full">
       <div className="px-6 md:px-8 py-5 border-b border-slate-100 flex items-center gap-2.5">
