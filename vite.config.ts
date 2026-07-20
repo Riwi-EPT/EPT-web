@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
@@ -25,6 +26,15 @@ export default defineConfig(() => {
         '/api': { target: API_TARGET, changeOrigin: true },
         '/lti': { target: API_TARGET, changeOrigin: true },
       },
+    },
+    // Unit/component tests (Vitest + Testing Library). jsdom gives a DOM;
+    // globals mirror the API repo's Vitest setup so specs read the same.
+    test: {
+      environment: 'jsdom',
+      globals: true,
+      setupFiles: ['./src/test/setup.ts'],
+      css: false,
+      restoreMocks: true,
     },
   };
 });
