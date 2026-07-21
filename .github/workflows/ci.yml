@@ -22,7 +22,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # The committed lockfile is generated on Windows; npm (ci OR install) then
+      # skips the Linux-only native optional deps (rollup/esbuild) it needs on the
+      # runner — npm bug npm/cli#4828. Removing the lockfile first makes npm resolve
+      # this platform's binaries fresh (the remedy npm itself recommends).
+      - run: rm -f package-lock.json && npm install --no-audit --no-fund
       - run: npm run lint
       - run: npm run build
       - run: npm test --if-present

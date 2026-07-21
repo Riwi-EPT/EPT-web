@@ -16,8 +16,11 @@ ENV NODE_AUTH_TOKEN=$NODE_AUTH_TOKEN
 ARG VITE_API_BASE_URL=""
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
-COPY package.json package-lock.json .npmrc ./
-RUN npm ci
+COPY package.json .npmrc ./
+# No package-lock.json on purpose: the committed lock is generated on Windows and
+# npm then skips the Linux native optional deps (rollup/esbuild) the Vite build
+# needs — npm bug npm/cli#4828. Installing without it resolves this platform's binaries.
+RUN npm install --no-audit --no-fund
 COPY . .
 RUN npm run build
 
