@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Award } from "lucide-react";
 import { StudentInfo } from "../types";
 import { isValidEmail } from "../lib/format";
-import { BLOCKED_KEY, ATTEMPTS_KEY, EXAM_DURATION_SECONDS } from "../lib/examSession";
+import { checkBlockStatus } from "../api";
+import { ATTEMPTS_KEY, EXAM_DURATION_SECONDS } from "../lib/examSession";
 import ExamBanner from "./login/ExamBanner";
 import StudentFields from "./login/StudentFields";
 import GuidelinesPanel from "./login/GuidelinesPanel";
@@ -26,7 +27,7 @@ export default function StudentForm({ onStart, currentVersion }: StudentFormProp
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [agreeTerms, setAgreeTerms] = useState(true);
 
-  // Cooldown & attempt tracking (local, this-device).
+  // Cooldown & attempt tracking (local, this-device — unrelated to the block).
   const [cooldownTime, setCooldownTime] = useState<number | null>(null);
   const [attemptsCount, setAttemptsCount] = useState(0);
   const [isBlocked, setIsBlocked] = useState(false);
@@ -36,22 +37,8 @@ export default function StudentForm({ onStart, currentVersion }: StudentFormProp
     if (!isValidEmail(normalizedEmail)) {
       setCooldownTime(null);
       setAttemptsCount(0);
-      setIsBlocked(false);
       return;
     }
-
-    // Permanent anti-cheat block list.
-    const blockedListStr = localStorage.getItem(BLOCKED_KEY);
-    if (blockedListStr) {
-      const blockedList = JSON.parse(blockedListStr);
-      if (blockedList[normalizedEmail]) {
-        setIsBlocked(true);
-        setCooldownTime(null);
-        setAttemptsCount(0);
-        return;
-      }
-    }
-    setIsBlocked(false);
 
     const stored = localStorage.getItem(ATTEMPTS_KEY);
     if (stored) {
@@ -71,6 +58,28 @@ export default function StudentForm({ onStart, currentVersion }: StudentFormProp
 
   useEffect(() => {
     checkEmailAttempts(email);
+  }, [email]);
+
+  // Anti-cheat block: server-side now (see api.ts). Debounced-by-effect on `email`;
+  // the `latestRequest` ref discards a response if a newer request has since been
+  // issued (the user kept typing), so a slow/out-of-order reply can't overwrite
+  // fresher state.
+  const latestRequest = useRef(0);
+  useEffect(() => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!isValidEmail(normalizedEmail)) {
+      setIsBlocked(false);
+      return;
+    }
+    const requestId = ++latestRequest.current;
+    checkBlockStatus(normalizedEmail)
+      .then(({ blocked }) => {
+        if (latestRequest.current === requestId) setIsBlocked(blocked);
+      })
+      .catch(() => {
+        // Network hiccup: fail open rather than lock the form on a transient error.
+        if (latestRequest.current === requestId) setIsBlocked(false);
+      });
   }, [email]);
 
   useEffect(() => {
