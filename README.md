@@ -32,4 +32,4 @@ so requests are same-origin and session cookies work without CORS friction.
 ## Production
 Set `VITE_API_BASE_URL` to the API origin at build time. Serve `dist/` as static files. The API
 must allow this SPA's origin via its `WEB_ORIGIN` CORS setting. Deploying to Vercel: see
-[EPT-docs/estado-y-operaciones.md](https://github.com/JTeban1/EPT-docs/blob/main/estado-y-operaciones.md).
+[EPT-docs/despliegue.md](https://github.com/JTeban1/EPT-docs/blob/main/despliegue.md).
