@@ -7,7 +7,7 @@ import {
   clearExamToken,
   decodeExamToken,
 } from "./api";
-import type { SubmitRequest } from "@jteban1/shared";
+import type { SubmitRequest } from "@riwi-ept/shared";
 
 function mockFetchOnce(res: Partial<Response> & { text: () => Promise<string> }) {
   return vi.spyOn(globalThis, "fetch").mockResolvedValue(res as Response);

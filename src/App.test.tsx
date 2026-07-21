@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, act, fireEvent } from "@testing-library/react";
-import type { ExamDTO, ResultDTO, SubmitRequest } from "@jteban1/shared";
+import type { ExamDTO, ResultDTO, SubmitRequest } from "@riwi-ept/shared";
 
 // Mock the API module: keep the real ApiError (App uses `instanceof`), stub the
 // network calls. examSession.ts imports `setExamToken` from the same module, so

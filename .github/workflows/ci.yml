@@ -7,13 +7,13 @@ on:
 
 permissions:
   contents: read
-  packages: read # install @jteban1/shared from GitHub Packages
+  packages: read # install @riwi-ept/shared from GitHub Packages
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      # read:packages for @jteban1/shared. GITHUB_TOKEN works if the package grants
+      # read:packages for @riwi-ept/shared. GITHUB_TOKEN works if the package grants
       # this repo read access; otherwise add a NODE_AUTH_TOKEN secret (PAT).
       NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN || secrets.GITHUB_TOKEN }}
     steps:

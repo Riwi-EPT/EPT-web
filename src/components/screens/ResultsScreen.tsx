@@ -1,5 +1,5 @@
 import { GraduationCap } from "lucide-react";
-import type { ResultDTO } from "@jteban1/shared";
+import type { ResultDTO } from "@riwi-ept/shared";
 import ReviewTab from "../ReviewTab";
 
 export default function ResultsScreen({

@@ -6,7 +6,7 @@
 FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 
-# GitHub Packages auth for @jteban1/shared (needs read:packages):
+# GitHub Packages auth for @riwi-ept/shared (needs read:packages):
 #   docker build --build-arg NODE_AUTH_TOKEN="$NODE_AUTH_TOKEN" \
 #     --build-arg VITE_API_BASE_URL="https://api.example.com" -t ept-web .
 ARG NODE_AUTH_TOKEN

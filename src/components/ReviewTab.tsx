@@ -1,4 +1,4 @@
-import type { ResultDTO } from "@jteban1/shared";
+import type { ResultDTO } from "@riwi-ept/shared";
 import { Award, Printer, RefreshCw, BookOpen, FileText } from "lucide-react";
 
 interface ReviewTabProps {

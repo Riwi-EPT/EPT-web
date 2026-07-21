@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import type { AdminQuestionDTO, AdminVersionDTO } from "@jteban1/shared";
+import type { AdminQuestionDTO, AdminVersionDTO } from "@riwi-ept/shared";
 import { Layers, Plus, Trash2, Star } from "lucide-react";
 import {
   listVersions, createVersion, deleteVersion, activateVersion,

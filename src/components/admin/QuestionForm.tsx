@@ -1,4 +1,4 @@
-import type { AdminQuestionDTO, Skill, QuestionType } from "@jteban1/shared";
+import type { AdminQuestionDTO, Skill, QuestionType } from "@riwi-ept/shared";
 import { Plus, Trash2, Save } from "lucide-react";
 import Field from "./Field";
 

@@ -1,7 +1,7 @@
 import {
   AlarmClock, Send, ChevronRight, GraduationCap, Settings, BookOpen, FileText,
 } from "lucide-react";
-import type { ExamDTO, QuestionDTO } from "@jteban1/shared";
+import type { ExamDTO, QuestionDTO } from "@riwi-ept/shared";
 import type { ExamTab, AnswersMap } from "./types";
 import ReadingSection from "./ReadingSection";
 import WritingSection from "./WritingSection";

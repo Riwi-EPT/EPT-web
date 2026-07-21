@@ -1,7 +1,7 @@
 # riwi-web
 
 > 📚 Full docs (architecture, deploy, ops, roadmap):
-> [EPT-docs](https://github.com/JTeban1/EPT-docs). This README covers local setup only.
+> [EPT-docs](https://github.com/Riwi-EPT/EPT-docs). This README covers local setup only.
 
 Frontend SPA for the RIWI English Placement Test (React + Vite + Tailwind). Renders the Reading
 and Writing exam, the results report, and the teacher/admin question-bank console. Fetches only
@@ -9,7 +9,7 @@ sanitized data from `riwi-api`; it never receives answer keys.
 
 ## Prerequisites
 - Node.js 20+
-- The shared contract is consumed from **GitHub Packages** as `"@jteban1/shared": "^0.2.0"` (no
+- The shared contract is consumed from **GitHub Packages** as `"@riwi-ept/shared": "^0.3.0"` (no
   longer a `file:` sibling). Installing it requires auth: a GitHub token with `read:packages`
   exported as `NODE_AUTH_TOKEN` (the repo's `.npmrc` reads it). See `EPT-shared/README.md`.
 - `riwi-api` running (default `http://localhost:3000`).
@@ -32,4 +32,4 @@ so requests are same-origin and session cookies work without CORS friction.
 ## Production
 Set `VITE_API_BASE_URL` to the API origin at build time. Serve `dist/` as static files. The API
 must allow this SPA's origin via its `WEB_ORIGIN` CORS setting. Deploying to Vercel: see
-[EPT-docs/deployment.md](https://github.com/JTeban1/EPT-docs/blob/main/deployment.md).
+[EPT-docs/deployment.md](https://github.com/Riwi-EPT/EPT-docs/blob/main/deployment.md).
