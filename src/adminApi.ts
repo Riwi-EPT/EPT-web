@@ -47,3 +47,15 @@ export const updateQuestion = (id: number, q: AdminQuestionDTO) =>
   req<{ ok: true }>(`/api/admin/questions/${id}`, { method: "PUT", body: JSON.stringify(q) });
 export const deleteQuestion = (id: number) =>
   req<{ ok: true }>(`/api/admin/questions/${id}`, { method: "DELETE" });
+
+// ── Anti-cheat blocked emails ──────────────────────────────────────────────────
+export interface BlockedEmailDTO {
+  id: number;
+  email: string;
+  name: string;
+  reason: string;
+  blockedAt: string;
+}
+export const listBlockedEmails = () => req<BlockedEmailDTO[]>("/api/admin/blocked-emails");
+export const unblockEmail = (id: number) =>
+  req<{ ok: true }>(`/api/admin/blocked-emails/${id}`, { method: "DELETE" });

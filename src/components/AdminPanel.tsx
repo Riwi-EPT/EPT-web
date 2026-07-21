@@ -10,7 +10,7 @@ import ConfirmDialog, { type ConfirmRequest } from "./admin/ConfirmDialog";
 interface AdminPanelProps {
   onClose: () => void;
   currentStudentEmail?: string;
-  onUnlockEmail: (email: string) => void;
+  onEmailUnblocked: (email: string) => void;
   onResetCooldown: (email: string) => void;
   currentVersion: string;
 }
@@ -20,7 +20,7 @@ type Tab = "questions" | "access";
 export default function AdminPanel({
   onClose,
   currentStudentEmail,
-  onUnlockEmail,
+  onEmailUnblocked,
   onResetCooldown,
 }: AdminPanelProps) {
   const [isAuthed, setIsAuthed] = useState(false);
@@ -107,8 +107,9 @@ export default function AdminPanel({
             ) : (
               <AccessControlTab
                 currentStudentEmail={currentStudentEmail}
-                onUnlockEmail={onUnlockEmail}
+                onEmailUnblocked={onEmailUnblocked}
                 onResetCooldown={onResetCooldown}
+                setError={setError}
               />
             )}
           </div>
