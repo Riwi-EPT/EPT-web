@@ -17,7 +17,10 @@ ARG VITE_API_BASE_URL=""
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 COPY package.json package-lock.json .npmrc ./
-RUN npm ci
+# `npm install` (not `npm ci`): the committed lockfile is generated on Windows, and
+# `npm ci` on Linux skips the Linux native optional deps (rollup/esbuild) the Vite
+# build needs — npm bug npm/cli#4828. install re-resolves them for this platform.
+RUN npm install --no-audit --no-fund
 COPY . .
 RUN npm run build
 

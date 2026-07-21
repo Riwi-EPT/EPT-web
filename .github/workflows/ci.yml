@@ -22,7 +22,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # `npm install` (not `npm ci`): a Windows-generated lockfile makes `npm ci`
+      # skip Linux-only native optional deps (rollup/esbuild) — npm bug
+      # npm/cli#4828 — which breaks the Vite build on the Linux runner. install
+      # re-resolves the current platform's binaries.
+      - run: npm install --no-audit --no-fund
       - run: npm run lint
       - run: npm run build
       - run: npm test --if-present
