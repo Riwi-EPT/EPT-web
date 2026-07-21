@@ -7,6 +7,8 @@ import type { ExamDTO, ResultDTO, SubmitRequest } from "@jteban1/shared";
 // it resolves to this mock too — harmless here.
 const fetchExam = vi.fn();
 const submitExam = vi.fn();
+const checkBlockStatus = vi.fn();
+const reportBlock = vi.fn();
 vi.mock("./api", async (importActual) => {
   const actual = await importActual<typeof import("./api")>();
   return {
@@ -14,6 +16,8 @@ vi.mock("./api", async (importActual) => {
     fetchExam: (...args: unknown[]) => fetchExam(...args),
     submitExam: (...args: unknown[]) => submitExam(...args),
     decodeExamToken: () => null,
+    checkBlockStatus: (...args: unknown[]) => checkBlockStatus(...args),
+    reportBlock: (...args: unknown[]) => reportBlock(...args),
   };
 });
 
@@ -86,6 +90,8 @@ describe("App auto-submit (P0-1 regression)", () => {
     sessionStorage.clear();
     fetchExam.mockReset().mockResolvedValue(EXAM);
     submitExam.mockReset().mockResolvedValue(RESULT);
+    checkBlockStatus.mockReset().mockResolvedValue({ blocked: false });
+    reportBlock.mockReset().mockResolvedValue({ ok: true });
     vi.useFakeTimers();
   });
 
@@ -142,5 +148,50 @@ describe("App auto-submit (P0-1 regression)", () => {
     expect(payload.answers.find((a) => a.questionId === 101)?.text).toBe(
       "Answer typed after the timer started."
     );
+  });
+});
+
+describe("App anti-cheat block (server-side)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    fetchExam.mockReset().mockResolvedValue(EXAM);
+    checkBlockStatus.mockReset().mockResolvedValue({ blocked: false });
+    reportBlock.mockReset().mockResolvedValue({ ok: true });
+  });
+
+  it("reports the block to the server (not localStorage) when the anonymous student switches tabs", async () => {
+    seedInProgressExam(localStorage, 600);
+    const App = await loadAppAt("/");
+    render(<App />);
+    await flush();
+
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    const vis = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      await Promise.resolve();
+    });
+    hidden.mockRestore();
+    vis.mockRestore();
+
+    expect(reportBlock).toHaveBeenCalledWith(
+      "ada@x.co",
+      "Ada",
+      expect.stringContaining("pestaña")
+    );
+    // The old localStorage-based block map is gone — nothing should be written there.
+    expect(localStorage.getItem("riwi_placement_blocked_emails_v1")).toBeNull();
+  });
+
+  it("checks the server on mount and blocks a resumed session if already blocked", async () => {
+    checkBlockStatus.mockResolvedValue({ blocked: true });
+    seedInProgressExam(localStorage, 600);
+    const App = await loadAppAt("/");
+    render(<App />);
+    await flush();
+
+    expect(checkBlockStatus).toHaveBeenCalledWith("ada@x.co");
+    expect(await screen.findByText(/EXAMEN BLOQUEADO/i)).toBeInTheDocument();
   });
 });

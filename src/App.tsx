@@ -3,10 +3,10 @@ import { GraduationCap, ShieldAlert } from "lucide-react";
 import type { StudentInfo } from "./types";
 import type { ExamDTO, ResultDTO, AnswerInput } from "@jteban1/shared";
 import type { ExamTab, AnswersMap } from "./components/exam/types";
-import { fetchExam, submitExam, decodeExamToken, ApiError } from "./api";
+import { fetchExam, submitExam, decodeExamToken, checkBlockStatus, reportBlock, ApiError } from "./api";
 import {
   isLtiMode, examVersion, storage, keys,
-  EXAM_DURATION_SECONDS, BLOCKED_KEY, ATTEMPTS_KEY,
+  EXAM_DURATION_SECONDS, ATTEMPTS_KEY,
 } from "./lib/examSession";
 import { cooldownMessage } from "./lib/format";
 import ConfirmModal from "./components/ConfirmModal";
@@ -52,18 +52,11 @@ export default function App() {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const [isBlocked, setIsBlocked] = useState<boolean>(() => {
-    if (isLtiMode) return false;
-    const savedStudent = storage.getItem(keys.student);
-    if (!savedStudent) return false;
-    try {
-      const info = JSON.parse(savedStudent);
-      const blockedMap = JSON.parse(storage.getItem(BLOCKED_KEY) ?? "{}");
-      return Boolean(info?.email && blockedMap[info.email.toLowerCase()]);
-    } catch {
-      return false;
-    }
-  });
+  // The block is server-side now (see api.ts checkBlockStatus/reportBlock), so it
+  // can't be read synchronously from storage. Start unblocked and verify against
+  // the server for a resumed session (effect below) — a brief flash before
+  // confirmation is an acceptable trade-off for a durable, cross-device block.
+  const [isBlocked, setIsBlocked] = useState(false);
 
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
@@ -90,6 +83,17 @@ export default function App() {
         } else {
           setExamError("Could not load the exam. Please try again later.");
         }
+      });
+  }, []);
+
+  // Verify a resumed session's block status against the server (the block is no
+  // longer readable synchronously from storage — see isBlocked above).
+  useEffect(() => {
+    if (isLtiMode || !studentInfo?.email) return;
+    checkBlockStatus(studentInfo.email)
+      .then(({ blocked }) => setIsBlocked(blocked))
+      .catch(() => {
+        /* network hiccup: fail open, don't lock a resumed session on a transient error */
       });
   }, []);
 
@@ -141,15 +145,13 @@ export default function App() {
           handleSubmitTest();
           return;
         }
-        const email = studentInfo.email.toLowerCase();
-        const blockedMap = JSON.parse(storage.getItem(BLOCKED_KEY) ?? "{}");
-        blockedMap[email] = {
-          email,
-          name: studentInfo.name,
-          blockedAt: new Date().toISOString(),
-          reason: "Abrió otra pestaña o abandonó la ventana del examen",
-        };
-        storage.setItem(BLOCKED_KEY, JSON.stringify(blockedMap));
+        // Report server-side (fire-and-forget) so the block is durable and
+        // cross-device; react locally right away regardless of the network result.
+        reportBlock(
+          studentInfo.email.toLowerCase(),
+          studentInfo.name,
+          "Abrió otra pestaña o abandonó la ventana del examen"
+        ).catch((err) => console.warn("⚠️ Failed to report anti-cheat block:", err));
         setIsTimerRunning(false);
         setIsBlocked(true);
       }
@@ -185,12 +187,17 @@ export default function App() {
     }
   }, [studentInfo, evaluationResult, isBlocked, secondsLeft]);
 
-  const handleStartExam = (info: StudentInfo) => {
+  const handleStartExam = async (info: StudentInfo) => {
     if (!isLtiMode) {
-      const blockedMap = JSON.parse(storage.getItem(BLOCKED_KEY) ?? "{}");
-      if (blockedMap[info.email.toLowerCase()]) {
-        setIsBlocked(true);
-        return;
+      try {
+        const { blocked } = await checkBlockStatus(info.email);
+        if (blocked) {
+          setIsBlocked(true);
+          return;
+        }
+      } catch (err) {
+        // Fail open on a transient network error rather than lock the student out.
+        console.warn("⚠️ Failed to check anti-cheat block status:", err);
       }
     }
     setIsBlocked(false);
@@ -217,18 +224,11 @@ export default function App() {
     setIsBlocked(false);
   };
 
-  const handleUnlockEmail = (email: string) => {
-    const lower = email.trim().toLowerCase();
-    try {
-      const blockedMap = JSON.parse(storage.getItem(BLOCKED_KEY) ?? "{}");
-      if (blockedMap[lower]) {
-        delete blockedMap[lower];
-        storage.setItem(BLOCKED_KEY, JSON.stringify(blockedMap));
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    if (studentInfo && studentInfo.email.toLowerCase() === lower) {
+  // The actual unblock is a server-side admin action (AccessControlTab calls the
+  // admin API directly). This just un-sticks the *current* browser's session when
+  // it happens to be the email that was just unblocked.
+  const handleEmailUnblocked = (email: string) => {
+    if (studentInfo && studentInfo.email.toLowerCase() === email.trim().toLowerCase()) {
       setIsBlocked(false);
       setIsTimerRunning(true);
     }
@@ -398,7 +398,7 @@ export default function App() {
         <AdminPanel
           onClose={() => setIsAdminOpen(false)}
           currentStudentEmail={studentInfo?.email}
-          onUnlockEmail={handleUnlockEmail}
+          onEmailUnblocked={handleEmailUnblocked}
           onResetCooldown={handleResetCooldown}
           currentVersion={examVersion}
         />
