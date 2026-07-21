@@ -118,3 +118,18 @@ export function submitExam(payload: SubmitRequest): Promise<ResultDTO> {
     body: JSON.stringify(payload),
   });
 }
+
+// ── Anti-cheat email block (anonymous self-service flow) ────────────────────
+// Server-side/durable version of the old localStorage block map. Still a
+// self-reported signal keyed by a self-typed email — durable, not tamper-proof.
+
+export function checkBlockStatus(email: string): Promise<{ blocked: boolean }> {
+  return request<{ blocked: boolean }>(`/api/block/status?email=${encodeURIComponent(email)}`);
+}
+
+export function reportBlock(email: string, name: string, reason: string): Promise<{ ok: true }> {
+  return request<{ ok: true }>(`/api/block`, {
+    method: "POST",
+    body: JSON.stringify({ email, name, reason }),
+  });
+}

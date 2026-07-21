@@ -24,7 +24,9 @@ export const keys = {
 };
 
 export const EXAM_DURATION_SECONDS = 3600; // 60 minutes for Reading + Writing
-export const BLOCKED_KEY = "riwi_placement_blocked_emails_v1";
+// The anti-cheat email block is server-side now (see api.ts checkBlockStatus/
+// reportBlock) — no local BLOCKED_KEY. ATTEMPTS_KEY remains a local, this-device
+// retake-attempt counter, unrelated to the block.
 export const ATTEMPTS_KEY = "riwi_placement_attempts_v1";
 
 // Capture the exam token handed over by the LTI launch (issue #9). It rides in the
