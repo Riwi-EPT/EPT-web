@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import type { AdminQuestionDTO } from "@jteban1/shared";
+import type { AdminQuestionDTO } from "@riwi-ept/shared";
 import QuestionForm from "./QuestionForm";
 
 function mcqValue(): AdminQuestionDTO {

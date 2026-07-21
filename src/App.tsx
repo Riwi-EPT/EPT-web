@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { GraduationCap, ShieldAlert } from "lucide-react";
 import type { StudentInfo } from "./types";
-import type { ExamDTO, ResultDTO, AnswerInput } from "@jteban1/shared";
+import type { ExamDTO, ResultDTO, AnswerInput } from "@riwi-ept/shared";
 import type { ExamTab, AnswersMap } from "./components/exam/types";
 import { fetchExam, submitExam, decodeExamToken, checkBlockStatus, reportBlock, ApiError } from "./api";
 import {

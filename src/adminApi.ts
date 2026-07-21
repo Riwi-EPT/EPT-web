@@ -1,4 +1,4 @@
-import type { AdminQuestionDTO, AdminVersionDTO } from "@jteban1/shared";
+import type { AdminQuestionDTO, AdminVersionDTO } from "@riwi-ept/shared";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 

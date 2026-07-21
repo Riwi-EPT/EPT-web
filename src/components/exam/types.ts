@@ -1,4 +1,4 @@
-import type { QuestionDTO } from "@jteban1/shared";
+import type { QuestionDTO } from "@riwi-ept/shared";
 
 export type ExamTab = "reading" | "writing";
 
