@@ -23,6 +23,11 @@
   box-shadow: 0 0 0 2px var(--color-indigo-400, #818cf8);
 }
 
+/* Tighter default print margins so the certificate has more room to fit one page. */
+@page {
+  margin: 10mm;
+}
+
 @media print {
   body {
     background: white !important;
@@ -49,6 +54,8 @@
     padding: 0 !important;
     margin: 0 !important;
     width: 100% !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
 
   /* Force background colors and gradients to print correctly */
