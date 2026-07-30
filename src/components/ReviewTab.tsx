@@ -86,25 +86,19 @@ export default function ReviewTab({ result, onReset }: ReviewTabProps) {
         />
       </div>
 
-      {/* Writing feedback */}
+      {/* Writing task scores — no AI feedback/corrections text is shown to students */}
       {writing.tasks.length > 0 && (
-        <div className="space-y-4">
-          <h3 className="text-sm font-bold text-slate-700">Writing feedback</h3>
+        <div className="space-y-2">
+          <h3 className="text-sm font-bold text-slate-700">Writing tasks</h3>
           {writing.tasks.map((t) => (
-            <div key={t.questionId} className="bg-white border border-slate-200 rounded-xl p-5 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-slate-800">Task {t.number}</span>
-                <span className="text-xs font-mono text-slate-500">
-                  {t.score}/{t.max} · CEFR {t.cefr}
-                </span>
-              </div>
-              <p className="text-sm text-slate-600 leading-relaxed">{t.feedback}</p>
-              {t.corrections && (
-                <p className="text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg p-3 leading-relaxed">
-                  <strong className="text-slate-600">Corrections: </strong>
-                  {t.corrections}
-                </p>
-              )}
+            <div
+              key={t.questionId}
+              className="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between"
+            >
+              <span className="text-sm font-semibold text-slate-800">Task {t.number}</span>
+              <span className="text-xs font-mono text-slate-500">
+                {t.score}/{t.max} · CEFR {t.cefr}
+              </span>
             </div>
           ))}
         </div>
