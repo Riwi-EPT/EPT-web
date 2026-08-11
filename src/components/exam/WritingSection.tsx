@@ -1,9 +1,13 @@
 import { useEffect } from "react";
-import { FileText, ArrowLeft, Send } from "lucide-react";
+import { FileText } from "lucide-react";
+import type { QuestionDTO } from "@riwi-ept/shared";
 import type { WritingSectionProps } from "./types";
+import QuestionNavigator from "./QuestionNavigator";
 
 // Writing tasks (essays). Each task may offer topic choices (delivered as the
-// question's options) and a free-text response with a word-count guide.
+// question's options) and a free-text response with a word-count guide. One
+// question at a time — QuestionNavigator owns the current/live index and the
+// per-question countdown.
 export default function WritingSection({
   questions,
   answers,
@@ -11,18 +15,87 @@ export default function WritingSection({
   updateText,
   wordCount,
   setShowSubmitModal,
-  setActiveTab,
+  currentIndex,
+  questionSecondsLeft,
+  onNext,
 }: WritingSectionProps) {
-  // Persist the default topic (first option) for any task that offers topics but
-  // has no selection yet, so the recorded answer matches the pre-selected UI state.
+  // Persist the default topic (first option) for the live task, so the
+  // recorded answer matches the pre-selected UI state. Scoped to the live
+  // question only — earlier ones already got their default when THEY were live.
   useEffect(() => {
-    for (const q of questions) {
-      const topics = q.options ?? [];
-      if (topics.length > 0 && !answers[q.id]?.selectedKey) {
-        updateTopic(q.id, topics[0].key);
-      }
+    const q = questions[currentIndex];
+    if (!q) return;
+    const topics = q.options ?? [];
+    if (topics.length > 0 && !answers[q.id]?.selectedKey) {
+      updateTopic(q.id, topics[0].key);
     }
-  }, [questions, answers, updateTopic]);
+  }, [questions, currentIndex, answers, updateTopic]);
+
+  const renderQuestion = (q: QuestionDTO, { isEditable }: { isEditable: boolean }) => {
+    const answer = answers[q.id] ?? {};
+    const words = wordCount(answer.text ?? "");
+    const min = q.wordMin ?? undefined;
+    const max = q.wordMax ?? undefined;
+    const withinRange = (min === undefined || words >= min) && (max === undefined || words <= max);
+    const topics = q.options ?? [];
+
+    return (
+      <div className="space-y-3">
+        <h3 className="font-semibold text-slate-800 text-sm">
+          <span className="text-slate-400 mr-2 font-mono">Task {questions.indexOf(q) + 1}.</span>
+          {q.prompt}
+        </h3>
+
+        {topics.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[11px] font-mono uppercase tracking-widest text-slate-400">
+              Choose one topic
+            </p>
+            <div className="grid gap-2">
+              {topics.map((t) => {
+                const isSelected = (answer.selectedKey ?? topics[0]?.key) === t.key;
+                return (
+                  <button
+                    key={t.key}
+                    onClick={() => isEditable && updateTopic(q.id, t.key)}
+                    disabled={!isEditable}
+                    className={`text-left text-sm px-4 py-2.5 rounded-lg border transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 ${
+                      isSelected
+                        ? "bg-indigo-50 border-indigo-300 text-indigo-900 font-medium"
+                        : "bg-white border-slate-200 text-slate-700 hover:border-indigo-200"
+                    }`}
+                  >
+                    {t.text}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <textarea
+          value={answer.text ?? ""}
+          onChange={(e) => isEditable && updateText(q.id, e.target.value)}
+          readOnly={!isEditable}
+          rows={10}
+          placeholder="Write your response here..."
+          className={`w-full rounded-xl border border-slate-200 p-4 text-sm text-slate-800 leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y ${
+            isEditable ? "" : "opacity-60 cursor-not-allowed"
+          }`}
+        />
+        <div className="flex justify-between text-xs font-mono">
+          <span className={withinRange && words > 0 ? "text-emerald-600" : "text-slate-400"}>
+            {words} words
+          </span>
+          {(min !== undefined || max !== undefined) && (
+            <span className="text-slate-400">
+              Target: {min ?? "?"}–{max ?? "?"} words
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -38,87 +111,15 @@ export default function WritingSection({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 md:px-8 py-6 space-y-8">
-        {questions.map((q, idx) => {
-          const answer = answers[q.id] ?? {};
-          const words = wordCount(answer.text ?? "");
-          const min = q.wordMin ?? undefined;
-          const max = q.wordMax ?? undefined;
-          const withinRange =
-            (min === undefined || words >= min) && (max === undefined || words <= max);
-          const topics = q.options ?? [];
-
-          return (
-            <div key={q.id} className="space-y-3">
-              <h3 className="font-semibold text-slate-800 text-sm">
-                <span className="text-slate-400 mr-2 font-mono">Task {idx + 1}.</span>
-                {q.prompt}
-              </h3>
-
-              {topics.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-[11px] font-mono uppercase tracking-widest text-slate-400">
-                    Choose one topic
-                  </p>
-                  <div className="grid gap-2">
-                    {topics.map((t) => {
-                      const isSelected = (answer.selectedKey ?? topics[0]?.key) === t.key;
-                      return (
-                        <button
-                          key={t.key}
-                          onClick={() => updateTopic(q.id, t.key)}
-                          className={`text-left text-sm px-4 py-2.5 rounded-lg border transition-all cursor-pointer ${
-                            isSelected
-                              ? "bg-indigo-50 border-indigo-300 text-indigo-900 font-medium"
-                              : "bg-white border-slate-200 text-slate-700 hover:border-indigo-200"
-                          }`}
-                        >
-                          {t.text}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <textarea
-                value={answer.text ?? ""}
-                onChange={(e) => updateText(q.id, e.target.value)}
-                rows={10}
-                placeholder="Write your response here..."
-                className="w-full rounded-xl border border-slate-200 p-4 text-sm text-slate-800 leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-y"
-              />
-              <div className="flex justify-between text-xs font-mono">
-                <span className={withinRange && words > 0 ? "text-emerald-600" : "text-slate-400"}>
-                  {words} words
-                </span>
-                {(min !== undefined || max !== undefined) && (
-                  <span className="text-slate-400">
-                    Target: {min ?? "?"}–{max ?? "?"} words
-                  </span>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="px-6 md:px-8 py-4 border-t border-slate-100 flex justify-between">
-        <button
-          onClick={() => setActiveTab("reading")}
-          className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all flex items-center gap-1.5 cursor-pointer"
-        >
-          <ArrowLeft size={14} />
-          Back to Reading
-        </button>
-        <button
-          onClick={() => setShowSubmitModal(true)}
-          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
-        >
-          <Send size={13} />
-          Submit Exam
-        </button>
-      </div>
+      <QuestionNavigator
+        questions={questions}
+        currentIndex={currentIndex}
+        questionSecondsLeft={questionSecondsLeft}
+        onNext={onNext}
+        onFinish={() => setShowSubmitModal(true)}
+        finishLabel="Submit Exam"
+        renderQuestion={renderQuestion}
+      />
     </div>
   );
 }

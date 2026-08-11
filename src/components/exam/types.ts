@@ -14,6 +14,12 @@ export interface ReadingSectionProps {
   answers: AnswersMap;
   updateMcq: (questionId: number, key: string) => void;
   setActiveTab: (tab: ExamTab) => void;
+  /** Furthest-reached (server-validated) question index within Reading. */
+  currentIndex: number;
+  /** Server-mirrored countdown for the live question, or null if untimed. */
+  questionSecondsLeft: number | null;
+  /** Advance past the live reading question (autosave + start the next one). */
+  onNext: () => void;
 }
 
 export interface WritingSectionProps {
@@ -24,4 +30,10 @@ export interface WritingSectionProps {
   wordCount: (text: string) => number;
   setShowSubmitModal: (show: boolean) => void;
   setActiveTab: (tab: ExamTab) => void;
+  /** Furthest-reached (server-validated) question index within Writing. */
+  currentIndex: number;
+  /** Server-mirrored countdown for the live question, or null if untimed. */
+  questionSecondsLeft: number | null;
+  /** Advance past the live writing question (autosave + start the next one). */
+  onNext: () => void;
 }

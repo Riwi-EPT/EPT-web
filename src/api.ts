@@ -1,8 +1,11 @@
 import type {
   AnswerInput,
   ExamDTO,
+  QuestionProgressResponse,
   ResultDTO,
+  SaveAnswersResponse,
   StartAttemptResponse,
+  StartQuestionResponse,
   StudentInfo,
   SubmitRequest,
 } from "@riwi-ept/shared";
@@ -178,17 +181,40 @@ export async function startAttempt(
 }
 
 /** Autosave. Each answer is stamped server-side; post-deadline writes are refused. */
-export function saveAnswers(answers: AnswerInput[]): Promise<{
-  ok: true;
-  saved: number;
-  remainingSeconds: number;
-}> {
+export function saveAnswers(answers: AnswerInput[]): Promise<SaveAnswersResponse> {
   const token = getAttemptToken();
   if (!token) return Promise.reject(new ApiError(0, "No attempt in progress.", null));
   return request(`/api/exam/answers`, {
     method: "PATCH",
     body: JSON.stringify({ attemptToken: token, answers }),
   });
+}
+
+// ── Per-question pacing (one-at-a-time nav + optional per-question timer) ──────
+// Same anti-cheat doctrine as the whole-exam clock: the server computes and
+// enforces every per-question deadline; these calls only ever fetch a mirror
+// of it.
+
+/**
+ * "Reach" a question and (if it's timed) start its own clock. Idempotent —
+ * calling it again for a question already reached returns the SAME deadline,
+ * so a reload never re-arms a question's clock.
+ */
+export function startQuestion(questionId: number): Promise<StartQuestionResponse> {
+  const token = getAttemptToken();
+  if (!token) return Promise.reject(new ApiError(0, "No attempt in progress.", null));
+  return request(`/api/exam/question/start`, {
+    method: "POST",
+    body: JSON.stringify({ attemptToken: token, questionId }),
+  });
+}
+
+/** Every question reached so far in this attempt — used on mount/resume to
+ *  find the furthest-reached question per skill without re-arming any clock. */
+export function fetchQuestionProgress(): Promise<QuestionProgressResponse> {
+  const token = getAttemptToken();
+  if (!token) return Promise.reject(new ApiError(0, "No attempt in progress.", null));
+  return request(`/api/exam/question/progress?attemptToken=${encodeURIComponent(token)}`);
 }
 
 // ── Anti-cheat email block (anonymous self-service flow) ────────────────────

@@ -6,6 +6,7 @@ import type { ExamTab, AnswersMap } from "./components/exam/types";
 import {
   fetchExam, submitExam, decodeExamToken, checkBlockStatus, reportBlock, ApiError,
   startAttempt, saveAnswers, getAttemptToken, clearAttemptToken,
+  startQuestion, fetchQuestionProgress,
 } from "./api";
 import {
   isLtiMode, examVersion, storage, keys,
@@ -53,6 +54,22 @@ export default function App() {
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   secondsLeftRef.current = secondsLeft;
   const [isTimerRunning, setIsTimerRunning] = useState(false);
+
+  // ── Per-question pacing (one-at-a-time nav + optional per-question timer) ────
+  // Same anti-cheat doctrine as the whole-exam clock above: the server computes
+  // and enforces every per-question deadline (see POST /api/exam/question/start);
+  // these are only ever a mirror of it. `readingIndex`/`writingIndex` are the
+  // furthest-reached (server-validated) question per skill — Back navigation
+  // inside QuestionNavigator moves a separate, purely local view index and never
+  // touches these, which is what keeps Back from ever re-arming a clock.
+  const [readingIndex, setReadingIndex] = useState(0);
+  const [writingIndex, setWritingIndex] = useState(0);
+  const [readingExpiresAt, setReadingExpiresAt] = useState<string | null>(null);
+  const [writingExpiresAt, setWritingExpiresAt] = useState<string | null>(null);
+  // Ticks once a second while the exam is active, purely to re-derive
+  // `questionSecondsLeft` below from a server-stamped deadline — never itself
+  // trusted as the deadline.
+  const [questionNow, setQuestionNow] = useState(() => Date.now());
   const [isGrading, setIsGrading] = useState(false);
   const [gradingProgress, setGradingProgress] = useState("");
   const [evaluationResult, setEvaluationResult] = useState<ResultDTO | null>(() => {
@@ -216,6 +233,125 @@ export default function App() {
     }
   }, [studentInfo, evaluationResult, isBlocked, secondsLeft]);
 
+  // On resume (reload, reopened tab), find the furthest-reached question per
+  // skill from the server's own record — never re-derived from anything local
+  // — so a reload picks up exactly where it left off without re-arming any
+  // question's clock. Runs once per (studentInfo, examData) pair.
+  useEffect(() => {
+    if (!studentInfo || !examData || evaluationResult || isBlocked) return;
+    if (!getAttemptToken()) return;
+    let cancelled = false;
+
+    const readingQs = examData.questions.filter((q) => q.skill === "reading");
+    const writingQs = examData.questions.filter((q) => q.skill === "writing");
+
+    fetchQuestionProgress()
+      .then(({ progress }) => {
+        if (cancelled || !progress.length) return;
+        const byId = new Map(progress.map((p) => [p.questionId, p]));
+
+        const seed = (
+          qs: typeof readingQs,
+          setIndex: (n: number) => void,
+          setExpiresAt: (v: string | null) => void
+        ) => {
+          if (!qs.length) return;
+          let furthest = 0;
+          for (let i = 0; i < qs.length; i++) {
+            if (byId.has(qs[i].id)) furthest = i;
+            else break;
+          }
+          setIndex(furthest);
+          setExpiresAt(byId.get(qs[furthest].id)?.expiresAt ?? null);
+        };
+
+        seed(readingQs, setReadingIndex, setReadingExpiresAt);
+        seed(writingQs, setWritingIndex, setWritingExpiresAt);
+      })
+      .catch(() => {
+        // Fail open: worst case the navigator re-starts from question 1, which
+        // is idempotent server-side and just costs a redundant (harmless) call.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [studentInfo, examData]);
+
+  // "Reach" the current question of whichever skill is active — starts its own
+  // clock (if timed) exactly once, server-side. Re-fires only when the active
+  // tab or that skill's current index actually changes (a real advance or tab
+  // switch), never on every render, so it can't re-arm anything.
+  useEffect(() => {
+    if (!studentInfo || !examData || evaluationResult || isBlocked) return;
+    const questions = examData.questions.filter((q) => q.skill === activeTab);
+    const index = activeTab === "reading" ? readingIndex : writingIndex;
+    const q = questions[index];
+    if (!q) return;
+    const setExpiresAt = activeTab === "reading" ? setReadingExpiresAt : setWritingExpiresAt;
+    startQuestion(q.id)
+      .then((res) => setExpiresAt(res.questionExpiresAt))
+      .catch((err) => console.warn("⚠️ Could not start this question:", err));
+  }, [activeTab, readingIndex, writingIndex, studentInfo, examData, evaluationResult, isBlocked]);
+
+  // Tick once a second so questionSecondsLeft (derived below) stays live.
+  useEffect(() => {
+    if (!(isTimerRunning && studentInfo && !evaluationResult && !isBlocked)) return;
+    const interval = setInterval(() => setQuestionNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [isTimerRunning, studentInfo, evaluationResult, isBlocked]);
+
+  const activeQuestionExpiresAt = activeTab === "reading" ? readingExpiresAt : writingExpiresAt;
+  const questionSecondsLeft = activeQuestionExpiresAt
+    ? Math.max(0, Math.ceil((Date.parse(activeQuestionExpiresAt) - questionNow) / 1000))
+    : null;
+
+  /**
+   * Advance past the live question of `tab`: flush-save whatever's filled in,
+   * then either move to the next question in that skill (which the "reach the
+   * current question" effect above will start server-side) or, past the last
+   * question, hand off to the same Finish action the manual Next button uses
+   * (tab switch for Reading, the submit-confirm modal for Writing).
+   *
+   * Reads answers via the ref, not the `answers` binding: this can run from the
+   * auto-advance effect's closure, whose deps deliberately exclude `answers` —
+   * same reasoning as handleSubmitTest below.
+   */
+  const goToNextQuestion = (tab: ExamTab) => {
+    if (!examData) return;
+    const questions = examData.questions.filter((q) => q.skill === tab);
+    const index = tab === "reading" ? readingIndex : writingIndex;
+    const setIndex = tab === "reading" ? setReadingIndex : setWritingIndex;
+    const setExpiresAt = tab === "reading" ? setReadingExpiresAt : setWritingExpiresAt;
+
+    const list = toAnswerList(answersRef.current);
+    if (list.length) {
+      saveAnswers(list).catch((err) => console.warn("⚠️ Flush-save on advance failed:", err));
+    }
+
+    const next = questions[index + 1];
+    if (!next) {
+      if (tab === "reading") setActiveTab("writing");
+      else setShowSubmitModal(true);
+      return;
+    }
+    setIndex(index + 1);
+    // Cleared immediately (rather than left at the just-expired value) so
+    // questionSecondsLeft doesn't briefly still read 0 for the NEW question and
+    // cascade into advancing past it too before its own start call resolves.
+    setExpiresAt(null);
+  };
+
+  // Auto-advance when the ACTIVE question's own clock (not the whole-exam one)
+  // reaches zero: autosave whatever is filled in, then move to the next
+  // question — the same "autosave then act" shape as the whole-exam
+  // auto-submit-at-zero effect above, just scoped to one question.
+  useEffect(() => {
+    if (!studentInfo || evaluationResult || isBlocked) return;
+    if (questionSecondsLeft !== 0) return;
+    goToNextQuestion(activeTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionSecondsLeft, activeTab, readingIndex, writingIndex, studentInfo, evaluationResult, isBlocked]);
+
   /** Turn a failed /api/exam/start into something the student can act on. */
   const handleStartFailure = (err: unknown) => {
     if (err instanceof ApiError && err.status === 403) {
@@ -272,6 +408,10 @@ export default function App() {
     setSecondsLeft(started.remainingSeconds);
     setIsTimerRunning(started.remainingSeconds > 0);
     setActiveTab("reading");
+    setReadingIndex(0);
+    setWritingIndex(0);
+    setReadingExpiresAt(null);
+    setWritingExpiresAt(null);
   };
 
   const clearExamState = () => {
@@ -280,6 +420,10 @@ export default function App() {
     setEvaluationResult(null);
     setSecondsLeft(null);
     setIsTimerRunning(false);
+    setReadingIndex(0);
+    setWritingIndex(0);
+    setReadingExpiresAt(null);
+    setWritingExpiresAt(null);
     clearAttemptToken();
     Object.values(keys).forEach((k) => storage.removeItem(k));
   };
@@ -451,6 +595,11 @@ export default function App() {
         updateText={updateText}
         onSubmitClick={() => setShowSubmitModal(true)}
         onOpenAdmin={() => setIsAdminOpen(true)}
+        readingIndex={readingIndex}
+        writingIndex={writingIndex}
+        questionSecondsLeft={questionSecondsLeft}
+        onNextReading={() => goToNextQuestion("reading")}
+        onNextWriting={() => goToNextQuestion("writing")}
       />
     );
   }
