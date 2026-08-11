@@ -60,6 +60,8 @@ export default function QuestionBankTab({
   // Per-version draft of the duration field, so typing doesn't fire a PUT per
   // keystroke. Committed on blur / Enter, then cleared so the row reflects the server.
   const [minuteDrafts, setMinuteDrafts] = useState<Record<number, string>>({});
+  // Same draft/commit pattern as minuteDrafts, but for the version's display name.
+  const [nameDrafts, setNameDrafts] = useState<Record<number, string>>({});
 
   const loadVersions = useCallback(async () => {
     const vs = await listVersions();
@@ -211,6 +213,33 @@ export default function QuestionBankTab({
     }
   };
 
+  /** Commit a name edit. No-op when blank/unchanged, so a stray blur costs nothing. */
+  const commitName = async (v: AdminVersionDTO) => {
+    const draft = nameDrafts[v.id];
+    if (draft === undefined) return;
+
+    const clear = () => setNameDrafts((prev) => {
+      const { [v.id]: _dropped, ...rest } = prev;
+      return rest;
+    });
+
+    const name = draft.trim();
+    if (!name || name === v.name) {
+      clear();
+      return;
+    }
+
+    setError(null);
+    try {
+      await updateVersion(v.id, { name });
+      clear();
+      await loadVersions();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not update the name.");
+      clear();
+    }
+  };
+
   return (
     <div className="flex h-full">
       {/* Versions sidebar */}
@@ -233,6 +262,21 @@ export default function QuestionBankTab({
               <span className="font-bold text-slate-800">{v.code}</span>
               {v.isActive && <Star size={12} className="text-amber-500 fill-amber-400" />}
             </div>
+
+            {/* Editable display name — distinct from the immutable code above. */}
+            <input
+              value={nameDrafts[v.id] ?? v.name}
+              aria-label={`Name for version ${v.code}`}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) =>
+                setNameDrafts((prev) => ({ ...prev, [v.id]: e.target.value }))
+              }
+              onBlur={() => commitName(v)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              }}
+              className="mt-1 w-full rounded border border-slate-200 px-1 py-0.5 text-[10px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            />
 
             {/* Per-version time limit. Editing an active version only affects
                 attempts started afterwards — a running attempt keeps the deadline
