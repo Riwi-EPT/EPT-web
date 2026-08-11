@@ -1,12 +1,20 @@
 import { useState, useEffect, useCallback } from "react";
 import type { AdminQuestionDTO, AdminVersionDTO } from "@riwi-ept/shared";
-import { Layers, Plus, Trash2, Star } from "lucide-react";
+import type { ImportedVersionSummary } from "../../adminApi";
+import { Layers, Plus, Trash2, Star, Clock, ArrowDownUp } from "lucide-react";
+import ImportExportModal from "./ImportExportModal";
 import {
-  listVersions, createVersion, deleteVersion, activateVersion,
+  listVersions, createVersion, updateVersion, deleteVersion, activateVersion,
   listQuestions, createQuestion, updateQuestion, deleteQuestion,
 } from "../../adminApi";
 import QuestionForm from "./QuestionForm";
 import type { ConfirmRequest } from "./ConfirmDialog";
+
+// Mirrors the server-side bounds in routes/admin.ts (60s..8h) so an out-of-range
+// value is caught before the round trip.
+const MIN_MINUTES = 1;
+const MAX_MINUTES = 480;
+const DEFAULT_DURATION_SECONDS = 3600;
 
 function emptyQuestion(versionId: number, nextNumber = 1): AdminQuestionDTO {
   return {
@@ -42,6 +50,11 @@ export default function QuestionBankTab({
   const [questions, setQuestions] = useState<AdminQuestionDTO[]>([]);
   const [editing, setEditing] = useState<AdminQuestionDTO | null>(null);
   const [newVersionCode, setNewVersionCode] = useState("");
+  const [newVersionMinutes, setNewVersionMinutes] = useState("60");
+  const [isImportExportOpen, setIsImportExportOpen] = useState(false);
+  // Per-version draft of the duration field, so typing doesn't fire a PUT per
+  // keystroke. Committed on blur / Enter, then cleared so the row reflects the server.
+  const [minuteDrafts, setMinuteDrafts] = useState<Record<number, string>>({});
 
   const loadVersions = useCallback(async () => {
     const vs = await listVersions();
@@ -114,12 +127,71 @@ export default function QuestionBankTab({
   const handleAddVersion = async () => {
     if (!newVersionCode.trim()) return;
     setError(null);
+    const minutes = Number(newVersionMinutes);
+    if (!Number.isInteger(minutes) || minutes < MIN_MINUTES || minutes > MAX_MINUTES) {
+      setError(`Duration must be a whole number between ${MIN_MINUTES} and ${MAX_MINUTES} minutes.`);
+      return;
+    }
     try {
-      await createVersion(newVersionCode.trim(), `Version ${newVersionCode.trim().toUpperCase()}`);
+      await createVersion(
+        newVersionCode.trim(),
+        `Version ${newVersionCode.trim().toUpperCase()}`,
+        minutes * 60
+      );
       setNewVersionCode("");
+      setNewVersionMinutes("60");
       await loadVersions();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not create version.");
+    }
+  };
+
+  /**
+   * Refresh after an import and jump to the first imported version.
+   *
+   * `loadVersions` alone would not move the selection — it preserves the current one
+   * (`prev ?? …`), so the admin would be left looking at whatever they had selected
+   * before and reasonably conclude nothing happened.
+   */
+  const handleImported = async (summaries: ImportedVersionSummary[]) => {
+    const vs = await listVersions();
+    setVersions(vs);
+    const first = summaries[0] && vs.find((v) => v.code === summaries[0].code);
+    if (first) {
+      setSelectedVersionId(first.id);
+      setEditing(null);
+    }
+  };
+
+  /** Commit a duration edit. No-op when unchanged, so a stray blur costs nothing. */
+  const commitDuration = async (v: AdminVersionDTO) => {
+    const draft = minuteDrafts[v.id];
+    if (draft === undefined) return;
+
+    const clear = () => setMinuteDrafts((prev) => {
+      const { [v.id]: _dropped, ...rest } = prev;
+      return rest;
+    });
+
+    const minutes = Number(draft);
+    if (!Number.isInteger(minutes) || minutes < MIN_MINUTES || minutes > MAX_MINUTES) {
+      setError(`Duration must be a whole number between ${MIN_MINUTES} and ${MAX_MINUTES} minutes.`);
+      clear();
+      return;
+    }
+    if (minutes * 60 === (v.durationSeconds ?? DEFAULT_DURATION_SECONDS)) {
+      clear();
+      return;
+    }
+
+    setError(null);
+    try {
+      await updateVersion(v.id, { durationSeconds: minutes * 60 });
+      clear();
+      await loadVersions();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not update the duration.");
+      clear();
     }
   };
 
@@ -145,6 +217,34 @@ export default function QuestionBankTab({
               <span className="font-bold text-slate-800">{v.code}</span>
               {v.isActive && <Star size={12} className="text-amber-500 fill-amber-400" />}
             </div>
+
+            {/* Per-version time limit. Editing an active version only affects
+                attempts started afterwards — a running attempt keeps the deadline
+                it was given (see attempts.expires_at). */}
+            <label className="flex items-center gap-1.5 mt-1.5 text-[10px] text-slate-500">
+              <Clock size={11} className="shrink-0" />
+              <input
+                type="number"
+                aria-label={`Time limit in minutes for version ${v.code}`}
+                min={MIN_MINUTES}
+                max={MAX_MINUTES}
+                value={
+                  minuteDrafts[v.id] ??
+                  String(Math.round((v.durationSeconds ?? DEFAULT_DURATION_SECONDS) / 60))
+                }
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) =>
+                  setMinuteDrafts((prev) => ({ ...prev, [v.id]: e.target.value }))
+                }
+                onBlur={() => commitDuration(v)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                }}
+                className="w-12 rounded border border-slate-200 px-1 py-0.5 text-[10px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              />
+              min
+            </label>
+
             <div className="flex gap-2 mt-1.5">
               {!v.isActive && (
                 <button
@@ -184,11 +284,30 @@ export default function QuestionBankTab({
             placeholder="New code (E)"
             className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400"
           />
+          <label className="flex items-center gap-1.5 text-[10px] text-slate-500">
+            <Clock size={11} className="shrink-0" />
+            <input
+              type="number"
+              aria-label="Time limit in minutes for the new version"
+              min={MIN_MINUTES}
+              max={MAX_MINUTES}
+              value={newVersionMinutes}
+              onChange={(e) => setNewVersionMinutes(e.target.value)}
+              className="w-14 rounded border border-slate-200 px-1 py-0.5 text-[10px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+            />
+            min limit
+          </label>
           <button
             onClick={handleAddVersion}
             className="w-full flex items-center justify-center gap-1 text-xs font-semibold text-indigo-600 border border-indigo-200 rounded-lg py-1.5 hover:bg-indigo-50 cursor-pointer"
           >
             <Plus size={12} /> Add version
+          </button>
+          <button
+            onClick={() => setIsImportExportOpen(true)}
+            className="w-full flex items-center justify-center gap-1 text-xs font-semibold text-slate-500 border border-slate-200 rounded-lg py-1.5 hover:bg-slate-50 cursor-pointer"
+          >
+            <ArrowDownUp size={12} /> Import / Export
           </button>
         </div>
       </div>
@@ -259,6 +378,15 @@ export default function QuestionBankTab({
           </>
         )}
       </div>
+
+      {isImportExportOpen && (
+        <ImportExportModal
+          versions={versions}
+          onClose={() => setIsImportExportOpen(false)}
+          setError={setError}
+          onImported={handleImported}
+        />
+      )}
     </div>
   );
 }
