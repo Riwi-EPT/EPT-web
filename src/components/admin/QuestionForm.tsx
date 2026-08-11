@@ -53,6 +53,14 @@ export default function QuestionForm({
         <Field label="Max points">
           <input type="number" value={value.maxPoints} onChange={(e) => set({ maxPoints: Number(e.target.value) })} className="form-input" />
         </Field>
+        <Field label="Time limit (seconds, optional — blank = untimed)">
+          <input
+            type="number"
+            value={value.timeLimitSeconds ?? ""}
+            onChange={(e) => set({ timeLimitSeconds: e.target.value ? Number(e.target.value) : null })}
+            className="form-input"
+          />
+        </Field>
       </div>
 
       <Field label="Prompt">

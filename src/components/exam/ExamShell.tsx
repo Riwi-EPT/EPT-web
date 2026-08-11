@@ -22,6 +22,13 @@ export interface ExamShellProps {
   updateText: (questionId: number, text: string) => void;
   onSubmitClick: () => void;
   onOpenAdmin: () => void;
+  /** Furthest-reached (server-validated) question index within each skill. */
+  readingIndex: number;
+  writingIndex: number;
+  /** Server-mirrored countdown for the currently-active skill's live question. */
+  questionSecondsLeft: number | null;
+  onNextReading: () => void;
+  onNextWriting: () => void;
 }
 
 export default function ExamShell({
@@ -39,6 +46,11 @@ export default function ExamShell({
   updateText,
   onSubmitClick,
   onOpenAdmin,
+  readingIndex,
+  writingIndex,
+  questionSecondsLeft,
+  onNextReading,
+  onNextWriting,
 }: ExamShellProps) {
   const readingAnswered = readingQuestions.filter((q) => answers[q.id]?.selectedKey).length;
   const writingAnswered = writingQuestions.filter((q) => (answers[q.id]?.text ?? "").trim()).length;
@@ -138,6 +150,9 @@ export default function ExamShell({
               answers={answers}
               updateMcq={updateMcq}
               setActiveTab={setActiveTab}
+              currentIndex={readingIndex}
+              questionSecondsLeft={activeTab === "reading" ? questionSecondsLeft : null}
+              onNext={onNextReading}
             />
           )}
           {examData && activeTab === "writing" && (
@@ -149,6 +164,9 @@ export default function ExamShell({
               wordCount={wordCount}
               setShowSubmitModal={onSubmitClick}
               setActiveTab={setActiveTab}
+              currentIndex={writingIndex}
+              questionSecondsLeft={activeTab === "writing" ? questionSecondsLeft : null}
+              onNext={onNextWriting}
             />
           )}
         </main>

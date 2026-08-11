@@ -12,6 +12,8 @@ const reportBlock = vi.fn();
 const startAttempt = vi.fn();
 const saveAnswers = vi.fn();
 const getAttemptToken = vi.fn();
+const startQuestion = vi.fn();
+const fetchQuestionProgress = vi.fn();
 vi.mock("./api", async (importActual) => {
   const actual = await importActual<typeof import("./api")>();
   return {
@@ -24,6 +26,8 @@ vi.mock("./api", async (importActual) => {
     startAttempt: (...args: unknown[]) => startAttempt(...args),
     saveAnswers: (...args: unknown[]) => saveAnswers(...args),
     getAttemptToken: () => getAttemptToken(),
+    startQuestion: (...args: unknown[]) => startQuestion(...args),
+    fetchQuestionProgress: (...args: unknown[]) => fetchQuestionProgress(...args),
   };
 });
 
@@ -112,6 +116,8 @@ describe("App auto-submit (P0-1 regression)", () => {
     // No stored handle by default, so the autosave effect stays out of the way of
     // the behaviors under test here.
     getAttemptToken.mockReset().mockReturnValue(null);
+    startQuestion.mockReset().mockResolvedValue({ questionExpiresAt: null, remainingSeconds: null });
+    fetchQuestionProgress.mockReset().mockResolvedValue({ progress: [] });
     vi.useFakeTimers();
   });
 
@@ -182,6 +188,8 @@ describe("App server-authoritative clock", () => {
     startAttempt.mockReset();
     saveAnswers.mockReset().mockResolvedValue({ ok: true, saved: 1, remainingSeconds: 118 });
     getAttemptToken.mockReset().mockReturnValue(null);
+    startQuestion.mockReset().mockResolvedValue({ questionExpiresAt: null, remainingSeconds: null });
+    fetchQuestionProgress.mockReset().mockResolvedValue({ progress: [] });
     vi.useFakeTimers();
   });
 
@@ -268,6 +276,8 @@ describe("App anti-cheat block (server-side)", () => {
     // No stored handle by default, so the autosave effect stays out of the way of
     // the behaviors under test here.
     getAttemptToken.mockReset().mockReturnValue(null);
+    startQuestion.mockReset().mockResolvedValue({ questionExpiresAt: null, remainingSeconds: null });
+    fetchQuestionProgress.mockReset().mockResolvedValue({ progress: [] });
   });
 
   it("reports the block to the server (not localStorage) when the anonymous student switches tabs", async () => {
@@ -303,5 +313,120 @@ describe("App anti-cheat block (server-side)", () => {
 
     expect(checkBlockStatus).toHaveBeenCalledWith("ada@x.co");
     expect(await screen.findByText(/EXAMEN BLOQUEADO/i)).toBeInTheDocument();
+  });
+});
+
+// Two writing tasks, so Next/Back/auto-advance have somewhere to go. Reading is
+// deliberately empty — these tests only exercise the Writing skill's navigator.
+const EXAM_TWO_TASKS: ExamDTO = {
+  versionCode: "A",
+  versionName: "Version A",
+  questions: [
+    {
+      id: 201, skill: "writing", type: "essay", number: 1, prompt: "Task 1",
+      passageText: null, wordMin: 5, wordMax: 100, maxPoints: 20, options: [],
+    },
+    {
+      id: 202, skill: "writing", type: "essay", number: 2, prompt: "Task 2",
+      passageText: null, wordMin: 5, wordMax: 100, maxPoints: 20, options: [],
+    },
+  ],
+};
+
+describe("App per-question timer", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    fetchExam.mockReset().mockResolvedValue(EXAM_TWO_TASKS);
+    submitExam.mockReset().mockResolvedValue(RESULT);
+    checkBlockStatus.mockReset().mockResolvedValue({ blocked: false });
+    reportBlock.mockReset().mockResolvedValue({ ok: true });
+    startAttempt.mockReset();
+    saveAnswers.mockReset().mockResolvedValue({ ok: true, saved: 1, remainingSeconds: 600 });
+    getAttemptToken.mockReset().mockReturnValue("attempt.jwt.sig");
+    startQuestion.mockReset();
+    fetchQuestionProgress.mockReset().mockResolvedValue({ progress: [] });
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("auto-advances to the next question when its OWN clock hits zero", async () => {
+    seedInProgressExam(localStorage, 600); // whole-exam clock: plenty of time left
+    startQuestion.mockImplementation((questionId: number) =>
+      Promise.resolve(
+        questionId === 201
+          ? { questionExpiresAt: new Date(Date.now() + 2000).toISOString(), remainingSeconds: 2 }
+          : { questionExpiresAt: null, remainingSeconds: null }
+      )
+    );
+
+    const App = await loadAppAt("/");
+    render(<App />);
+    await flush();
+
+    fireEvent.click(screen.getByRole("button", { name: /Part 2 . Writing/ }));
+    await flush();
+
+    fireEvent.change(screen.getByPlaceholderText(/Write your response here/), {
+      target: { value: "Racing the clock." },
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+
+    // Flushed the in-progress answer, then moved on to the next question.
+    expect(saveAnswers).toHaveBeenCalled();
+    expect(startQuestion).toHaveBeenCalledWith(202);
+    expect(screen.getByText(/Question 2 of 2/)).toBeInTheDocument();
+  });
+
+  it("Back never calls the server (can't re-arm a question's clock)", async () => {
+    seedInProgressExam(localStorage, 600);
+    startQuestion.mockResolvedValue({ questionExpiresAt: null, remainingSeconds: null });
+
+    const App = await loadAppAt("/");
+    render(<App />);
+    await flush();
+
+    fireEvent.click(screen.getByRole("button", { name: /Part 2 . Writing/ }));
+    await flush();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Next$/ }));
+    await flush();
+    expect(screen.getByText(/Question 2 of 2/)).toBeInTheDocument();
+
+    startQuestion.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: /^Back$/ }));
+    await flush();
+
+    expect(screen.getByText(/Question 1 of 2/)).toBeInTheDocument();
+    expect(startQuestion).not.toHaveBeenCalled();
+  });
+
+  it("resumes at the furthest-reached question on reload, without re-arming its clock", async () => {
+    seedInProgressExam(localStorage, 600);
+    const futureExpiry = new Date(Date.now() + 500_000).toISOString();
+    fetchQuestionProgress.mockResolvedValue({
+      progress: [
+        { questionId: 201, startedAt: new Date().toISOString(), expiresAt: null, autoAdvancedAt: null },
+        { questionId: 202, startedAt: new Date().toISOString(), expiresAt: futureExpiry, autoAdvancedAt: null },
+      ],
+    });
+    startQuestion.mockResolvedValue({ questionExpiresAt: futureExpiry, remainingSeconds: 500 });
+
+    const App = await loadAppAt("/");
+    render(<App />);
+    await flush();
+
+    fireEvent.click(screen.getByRole("button", { name: /Part 2 . Writing/ }));
+    await flush();
+
+    // Resumed directly at question 2 — the furthest already reached — not
+    // restarted from question 1.
+    expect(screen.getByText(/Question 2 of 2/)).toBeInTheDocument();
   });
 });

@@ -84,6 +84,7 @@ export interface BundleQuestion {
   wordMin: number | null;
   wordMax: number | null;
   maxPoints: number;
+  timeLimitSeconds: number | null;
   options: BundleOption[];
 }
 
