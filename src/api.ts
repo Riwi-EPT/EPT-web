@@ -1,4 +1,11 @@
-import type { ExamDTO, ResultDTO, SubmitRequest } from "@riwi-ept/shared";
+import type {
+  AnswerInput,
+  ExamDTO,
+  ResultDTO,
+  StartAttemptResponse,
+  StudentInfo,
+  SubmitRequest,
+} from "@riwi-ept/shared";
 
 // In dev, requests are relative and proxied to the API by Vite. In production,
 // set VITE_API_BASE_URL to the API origin (the API allows it via CORS).
@@ -115,7 +122,72 @@ export function fetchExam(version: string): Promise<ExamDTO> {
 export function submitExam(payload: SubmitRequest): Promise<ResultDTO> {
   return request<ResultDTO>(`/api/submit`, {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, attemptToken: getAttemptToken() ?? undefined }),
+  });
+}
+
+// ── Attempt handle (server-authoritative exam clock) ─────────────────────────
+// Distinct from the exam token above: that one says who you are (LTI launch),
+// this one says when you must finish (exam start). Session-scoped, because a
+// clock is per-sitting; the in-memory mirror keeps things working if storage is
+// blocked. Losing it is not a way to gain time — the server resumes the same
+// attempt from its own record.
+
+const ATTEMPT_TOKEN_KEY = "ept_attempt_token";
+let attemptToken: string | null =
+  typeof window !== "undefined" ? sessionStorage.getItem(ATTEMPT_TOKEN_KEY) : null;
+
+export function setAttemptToken(token: string): void {
+  attemptToken = token;
+  try {
+    sessionStorage.setItem(ATTEMPT_TOKEN_KEY, token);
+  } catch {
+    /* keep the in-memory copy */
+  }
+}
+
+export function getAttemptToken(): string | null {
+  return attemptToken;
+}
+
+export function clearAttemptToken(): void {
+  attemptToken = null;
+  try {
+    sessionStorage.removeItem(ATTEMPT_TOKEN_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Start — or resume — an attempt, and get the authoritative remaining time.
+ * Safe to call on every mount: the server returns the *existing* attempt when one
+ * is still running, so a reload continues the clock instead of resetting it.
+ * Stores the returned handle as a side effect.
+ */
+export async function startAttempt(
+  versionCode: string,
+  info: StudentInfo
+): Promise<StartAttemptResponse> {
+  const res = await request<StartAttemptResponse>(`/api/exam/start`, {
+    method: "POST",
+    body: JSON.stringify({ versionCode, info }),
+  });
+  setAttemptToken(res.attemptToken);
+  return res;
+}
+
+/** Autosave. Each answer is stamped server-side; post-deadline writes are refused. */
+export function saveAnswers(answers: AnswerInput[]): Promise<{
+  ok: true;
+  saved: number;
+  remainingSeconds: number;
+}> {
+  const token = getAttemptToken();
+  if (!token) return Promise.reject(new ApiError(0, "No attempt in progress.", null));
+  return request(`/api/exam/answers`, {
+    method: "PATCH",
+    body: JSON.stringify({ attemptToken: token, answers }),
   });
 }
 

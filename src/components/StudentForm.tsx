@@ -18,9 +18,15 @@ const SELF_SERVICE_COOLDOWN_MS = 72 * 60 * 60 * 1000;
 interface StudentFormProps {
   onStart: (info: StudentInfo) => void;
   currentVersion: string;
+  /** This version's length, from the fetched exam. Falls back when not yet loaded. */
+  durationSeconds?: number;
 }
 
-export default function StudentForm({ onStart, currentVersion }: StudentFormProps) {
+export default function StudentForm({
+  onStart,
+  currentVersion,
+  durationSeconds,
+}: StudentFormProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [teacher, setTeacher] = useState("");
@@ -100,12 +106,16 @@ export default function StudentForm({ onStart, currentVersion }: StudentFormProp
     e.preventDefault();
     if (!name.trim() || !email.trim()) return;
 
+    // Local bookkeeping only — NOT the exam start time. The server stamps that at
+    // POST /api/exam/start; a client-supplied start time is not trusted.
+    const registeredAt = new Date().toISOString();
+
     const info: StudentInfo = {
       name: name.trim(),
       email: email.trim().toLowerCase(),
       date,
       teacher: teacher.trim() || "N/A",
-      startedAt: new Date().toISOString(),
+      startedAt: null,
     };
 
     // Record the attempt registration (this-device).
@@ -116,7 +126,7 @@ export default function StudentForm({ onStart, currentVersion }: StudentFormProp
       name: info.name,
       email: info.email,
       attempts: prevRecord ? prevRecord.attempts + 1 : 1,
-      lastAttemptAt: info.startedAt,
+      lastAttemptAt: registeredAt,
     };
     localStorage.setItem(ATTEMPTS_KEY, JSON.stringify(records));
 
@@ -142,7 +152,7 @@ export default function StudentForm({ onStart, currentVersion }: StudentFormProp
             onTeacher={setTeacher}
             onDate={setDate}
             currentVersion={currentVersion}
-            durationMinutes={Math.round(EXAM_DURATION_SECONDS / 60)}
+            durationMinutes={Math.round((durationSeconds ?? EXAM_DURATION_SECONDS) / 60)}
           />
 
           <hr className="border-slate-150" />
