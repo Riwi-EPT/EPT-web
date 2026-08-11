@@ -3,7 +3,10 @@ import { GraduationCap, ShieldAlert } from "lucide-react";
 import type { StudentInfo } from "./types";
 import type { ExamDTO, ResultDTO, AnswerInput } from "@riwi-ept/shared";
 import type { ExamTab, AnswersMap } from "./components/exam/types";
-import { fetchExam, submitExam, decodeExamToken, checkBlockStatus, reportBlock, ApiError } from "./api";
+import {
+  fetchExam, submitExam, decodeExamToken, checkBlockStatus, reportBlock, ApiError,
+  startAttempt, saveAnswers, getAttemptToken, clearAttemptToken,
+} from "./api";
 import {
   isLtiMode, examVersion, storage, keys,
   EXAM_DURATION_SECONDS, ATTEMPTS_KEY,
@@ -35,15 +38,20 @@ export default function App() {
   answersRef.current = answers;
   // Guards against a double auto-submit (e.g. timer expiry racing a tab-switch).
   const submittingRef = useRef(false);
+  // Same reason as answersRef: the autosave effect must not list `secondsLeft` in
+  // its deps (that would reset the debounce every tick), but still needs the
+  // current value to stop saving once time is up.
+  const secondsLeftRef = useRef<number | null>(null);
   const [examData, setExamData] = useState<ExamDTO | null>(null);
   const [examError, setExamError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<ExamTab>("reading");
-  const [secondsLeft, setSecondsLeft] = useState<number>(() => {
-    const saved = storage.getItem(keys.timer);
-    const parsed = saved ? parseInt(saved, 10) : NaN;
-    return !isNaN(parsed) && parsed >= 0 ? parsed : EXAM_DURATION_SECONDS;
-  });
+  // null = the server hasn't told us yet. Deliberately NOT seeded from storage:
+  // the remaining time is the server's to report (POST /api/exam/start), and a
+  // local seed could only disagree with it. null also keeps the auto-submit-at-zero
+  // effect from firing before we know the real value.
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  secondsLeftRef.current = secondsLeft;
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [isGrading, setIsGrading] = useState(false);
   const [gradingProgress, setGradingProgress] = useState("");
@@ -129,11 +137,29 @@ export default function App() {
     if (evaluationResult) storage.setItem(keys.result, JSON.stringify(evaluationResult));
     else storage.removeItem(keys.result);
   }, [evaluationResult]);
+  // (The countdown is deliberately no longer mirrored to storage — see the note
+  // on `keys` in lib/examSession.ts. It is re-derived from the server on resume.)
+
+  // Resume the server's clock for a session restored from storage (page reload,
+  // reopened tab). This is what makes a refresh continue the exam rather than
+  // restart it: /api/exam/start returns the *existing* attempt when one is live.
   useEffect(() => {
-    if (studentInfo && !evaluationResult && !isBlocked) {
-      storage.setItem(keys.timer, String(secondsLeft));
-    }
-  }, [secondsLeft, studentInfo, evaluationResult, isBlocked]);
+    if (!studentInfo || evaluationResult || isBlocked) return;
+    let cancelled = false;
+    startAttempt(examVersion, studentInfo)
+      .then((started) => {
+        if (cancelled) return;
+        setSecondsLeft(started.remainingSeconds);
+        setIsTimerRunning(started.remainingSeconds > 0);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        handleStartFailure(err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Anti-cheat: tab/window switch
   useEffect(() => {
@@ -166,7 +192,7 @@ export default function App() {
   useEffect(() => {
     if (!(isTimerRunning && studentInfo && !evaluationResult && !isBlocked)) return;
     const interval = setInterval(() => {
-      setSecondsLeft((prev) => (prev <= 1 ? 0 : prev - 1));
+      setSecondsLeft((prev) => (prev === null ? null : prev <= 1 ? 0 : prev - 1));
     }, 1000);
     return () => clearInterval(interval);
   }, [isTimerRunning, studentInfo, evaluationResult, isBlocked]);
@@ -180,12 +206,37 @@ export default function App() {
     }
   }, [secondsLeft, isTimerRunning, studentInfo, evaluationResult, isBlocked]);
 
-  // Resume timer if logged in mid-exam
+  // Resume timer if logged in mid-exam (only once the server has reported a value).
   useEffect(() => {
-    if (studentInfo && !evaluationResult && !isTimerRunning && !isBlocked && secondsLeft > 0) {
+    if (
+      studentInfo && !evaluationResult && !isTimerRunning && !isBlocked &&
+      secondsLeft !== null && secondsLeft > 0
+    ) {
       setIsTimerRunning(true);
     }
   }, [studentInfo, evaluationResult, isBlocked, secondsLeft]);
+
+  /** Turn a failed /api/exam/start into something the student can act on. */
+  const handleStartFailure = (err: unknown) => {
+    if (err instanceof ApiError && err.status === 403) {
+      const reason = (err.body as { reason?: string } | null)?.reason;
+      if (reason === "attempt_expired") {
+        // The server finalized an attempt whose deadline passed while they were
+        // away — their in-time work was graded. Clear local state so they aren't
+        // left sitting in a dead exam.
+        clearExamState();
+        setErrorMessage(
+          "Your exam time ran out, so your attempt was submitted automatically. " +
+            "Only the answers saved before the deadline were graded."
+        );
+        return;
+      }
+      // Otherwise it's the retake cooldown.
+      setErrorMessage(cooldownMessage(err));
+      return;
+    }
+    setErrorMessage("Could not start the exam. Please try again.");
+  };
 
   const handleStartExam = async (info: StudentInfo) => {
     if (!isLtiMode) {
@@ -202,11 +253,24 @@ export default function App() {
     }
     setIsBlocked(false);
     submittingRef.current = false;
-    setStudentInfo({ ...info, startedAt: new Date().toISOString() });
+
+    // Start the server clock BEFORE entering the exam. /api/exam/start fails
+    // closed, and honoring that is the point: if we cannot establish an
+    // enforceable deadline, the student stays on the login screen with a retry
+    // rather than sitting in an untimed exam.
+    let started;
+    try {
+      started = await startAttempt(examVersion, info);
+    } catch (err) {
+      handleStartFailure(err);
+      return;
+    }
+
+    // startedAt is the server's to record now (see StudentInfo.startedAt).
+    setStudentInfo({ ...info, startedAt: null });
     setAnswers({});
-    setSecondsLeft(EXAM_DURATION_SECONDS);
-    storage.setItem(keys.timer, String(EXAM_DURATION_SECONDS));
-    setIsTimerRunning(true);
+    setSecondsLeft(started.remainingSeconds);
+    setIsTimerRunning(started.remainingSeconds > 0);
     setActiveTab("reading");
   };
 
@@ -214,8 +278,9 @@ export default function App() {
     setStudentInfo(null);
     setAnswers({});
     setEvaluationResult(null);
-    setSecondsLeft(EXAM_DURATION_SECONDS);
+    setSecondsLeft(null);
     setIsTimerRunning(false);
+    clearAttemptToken();
     Object.values(keys).forEach((k) => storage.removeItem(k));
   };
 
@@ -249,13 +314,53 @@ export default function App() {
 
   // MCQ choice and essay-topic choice are the same operation (set selectedKey).
   const updateSelectedKey = (questionId: number, key: string) => {
-    if (secondsLeft <= 0) return;
+    if (secondsLeft !== null && secondsLeft <= 0) return;
     setAnswers((prev) => ({ ...prev, [questionId]: { ...prev[questionId], selectedKey: key } }));
   };
   const updateText = (questionId: number, text: string) => {
-    if (secondsLeft <= 0) return;
+    if (secondsLeft !== null && secondsLeft <= 0) return;
     setAnswers((prev) => ({ ...prev, [questionId]: { ...prev[questionId], text } }));
   };
+
+  /** The answers map flattened for the wire. Shared by autosave and submit. */
+  const toAnswerList = (map: AnswersMap): AnswerInput[] =>
+    Object.entries(map).map(([id, a]) => ({
+      questionId: Number(id),
+      selectedKey: a.selectedKey,
+      text: a.text,
+    }));
+
+  // ── Autosave ────────────────────────────────────────────────────────────────
+  // Debounced so typing an essay doesn't produce a request per keystroke. Each
+  // save is stamped server-side, which is what lets the server grade only the work
+  // that existed before the deadline. Failures are non-fatal: the answers stay in
+  // local storage and submit's in-time body fallback covers a save that never
+  // landed — the one place this design deliberately fails open.
+  useEffect(() => {
+    if (!studentInfo || evaluationResult || isBlocked) return;
+    if (!getAttemptToken()) return;
+    const left = secondsLeftRef.current;
+    if (left === null || left <= 0) return;
+
+    const list = toAnswerList(answers);
+    if (!list.length) return;
+
+    const t = setTimeout(() => {
+      saveAnswers(list).catch((err) => {
+        if (err instanceof ApiError && err.status === 409) {
+          // The server says time is up. Trust it over our own countdown and let
+          // the auto-submit effect finalize (isTimerRunning stays true so it fires).
+          setSecondsLeft(0);
+          return;
+        }
+        console.warn("⚠️ Autosave failed; keeping local copy:", err);
+      });
+    }, 2500);
+    return () => clearTimeout(t);
+    // NOTE: `secondsLeft` is read through a ref above and deliberately kept OUT of
+    // these deps. Including it would re-run this effect every tick, clearing the
+    // debounce timeout before it could ever fire — autosave would silently never run.
+  }, [answers, studentInfo, evaluationResult, isBlocked]);
 
   const handleSubmitTest = async () => {
     if (!studentInfo || submittingRef.current) return;
@@ -266,11 +371,7 @@ export default function App() {
 
     // Read the latest answers via the ref: this runs from stale effect closures
     // on auto-submit, where the `answers` binding would be out of date.
-    const answerList: AnswerInput[] = Object.entries(answersRef.current).map(([id, a]) => ({
-      questionId: Number(id),
-      selectedKey: a.selectedKey,
-      text: a.text,
-    }));
+    const answerList: AnswerInput[] = toAnswerList(answersRef.current);
 
     try {
       const result = await submitExam({ versionCode: examVersion, info: studentInfo, answers: answerList });
@@ -316,6 +417,7 @@ export default function App() {
         onStart={handleStartExam}
         currentVersion={examVersion}
         onOpenAdmin={() => setIsAdminOpen(true)}
+        durationSeconds={examData?.durationSeconds}
       />
     );
   } else if (isBlocked) {
@@ -334,7 +436,9 @@ export default function App() {
     screen = (
       <ExamShell
         studentName={studentInfo.name}
-        secondsLeft={secondsLeft}
+        // Before the server reports, show the version's nominal length rather than
+        // a 0 that would read as "time's up".
+        secondsLeft={secondsLeft ?? examData?.durationSeconds ?? EXAM_DURATION_SECONDS}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         examData={examData}
