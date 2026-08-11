@@ -16,6 +16,10 @@ const MIN_MINUTES = 1;
 const MAX_MINUTES = 480;
 const DEFAULT_DURATION_SECONDS = 3600;
 
+// Mirrors MIN/MAX_QUESTION_TIME_LIMIT_SECONDS in db/admin.ts.
+const MIN_QUESTION_TIME_LIMIT_SECONDS = 10;
+const MAX_QUESTION_TIME_LIMIT_SECONDS = 3600;
+
 function emptyQuestion(versionId: number, nextNumber = 1): AdminQuestionDTO {
   return {
     versionId,
@@ -29,6 +33,7 @@ function emptyQuestion(versionId: number, nextNumber = 1): AdminQuestionDTO {
     wordMax: null,
     maxPoints: 1,
     position: 0,
+    timeLimitSeconds: null,
     options: [
       { key: "a", text: "", isCorrect: true },
       { key: "b", text: "", isCorrect: false },
@@ -95,6 +100,17 @@ export default function QuestionBankTab({
         setError("Select the correct option.");
         return;
       }
+    }
+    if (
+      editing.timeLimitSeconds != null &&
+      (!Number.isInteger(editing.timeLimitSeconds) ||
+        editing.timeLimitSeconds < MIN_QUESTION_TIME_LIMIT_SECONDS ||
+        editing.timeLimitSeconds > MAX_QUESTION_TIME_LIMIT_SECONDS)
+    ) {
+      setError(
+        `Time limit must be blank or a whole number between ${MIN_QUESTION_TIME_LIMIT_SECONDS} and ${MAX_QUESTION_TIME_LIMIT_SECONDS} seconds.`
+      );
+      return;
     }
 
     try {
@@ -350,6 +366,11 @@ export default function QuestionBankTab({
                       <span className="px-1.5 py-0.5 bg-slate-100 rounded">{q.type}</span>
                       <span>#{q.number}</span>
                       <span>{q.maxPoints} pt</span>
+                      {q.timeLimitSeconds != null && (
+                        <span className="flex items-center gap-0.5">
+                          <Clock size={10} /> {q.timeLimitSeconds}s
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-slate-800 mt-1 truncate">{q.prompt}</p>
                   </div>

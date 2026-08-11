@@ -61,4 +61,22 @@ describe("QuestionForm", () => {
     const next = onChange.mock.calls[0][0] as AdminQuestionDTO;
     expect(next.options.map((o) => o.isCorrect)).toEqual([false, true]);
   });
+
+  it("round-trips a numeric time limit", () => {
+    const onChange = renderForm(mcqValue());
+    fireEvent.change(screen.getByLabelText(/Time limit/), { target: { value: "30" } });
+
+    const next = onChange.mock.calls[0][0] as AdminQuestionDTO;
+    expect(next.timeLimitSeconds).toBe(30);
+  });
+
+  it("clears the time limit to null when the field is emptied", () => {
+    const value = mcqValue();
+    value.timeLimitSeconds = 30;
+    const onChange = renderForm(value);
+    fireEvent.change(screen.getByLabelText(/Time limit/), { target: { value: "" } });
+
+    const next = onChange.mock.calls[0][0] as AdminQuestionDTO;
+    expect(next.timeLimitSeconds).toBeNull();
+  });
 });

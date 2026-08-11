@@ -45,6 +45,7 @@ const BUNDLE: ExamBundle = {
           wordMin: null,
           wordMax: null,
           maxPoints: 1,
+          timeLimitSeconds: null,
           options: [
             { key: "a", text: "no", isCorrect: false },
             { key: "b", text: "yes", isCorrect: true },
