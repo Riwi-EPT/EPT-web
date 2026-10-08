@@ -308,9 +308,18 @@ export default function App() {
     const tab = activeTab;
     const q = questions[sectionIndex[tab]];
     if (!q) return;
+    // A response that lands after the index/tab moved on belongs to an older
+    // question; writing it would give the live question a stale (possibly past)
+    // deadline and auto-advance past it.
+    let cancelled = false;
     startQuestion(q.id)
-      .then((res) => setExpiresAtFor(tab, res.questionExpiresAt))
+      .then((res) => {
+        if (!cancelled) setExpiresAtFor(tab, res.questionExpiresAt);
+      })
       .catch((err) => console.warn("⚠️ Could not start this question:", err));
+    return () => {
+      cancelled = true;
+    };
   }, [activeTab, sectionIndex, studentInfo, examData, evaluationResult, isBlocked]);
 
   // Tick once a second so questionSecondsLeft (derived below) stays live.
