@@ -70,6 +70,23 @@ describe("QuestionForm", () => {
     expect(next.timeLimitSeconds).toBe(30);
   });
 
+  it("switching to listening forces mcq", () => {
+    const value = { ...mcqValue(), skill: "writing" as const, type: "essay" as const };
+    const onChange = renderForm(value);
+    fireEvent.change(screen.getByLabelText("Skill"), { target: { value: "listening" } });
+
+    const next = onChange.mock.calls[0][0] as AdminQuestionDTO;
+    expect(next.skill).toBe("listening");
+    expect(next.type).toBe("mcq");
+  });
+
+  it("shows no passage or audio picker for a listening question", () => {
+    renderForm({ ...mcqValue(), skill: "listening" });
+    expect(screen.queryByLabelText(/Passage/)).toBeNull();
+    expect(screen.queryByLabelText(/Audio track/)).toBeNull();
+    expect(screen.getByText(/fixed audio/)).toBeInTheDocument();
+  });
+
   it("clears the time limit to null when the field is emptied", () => {
     const value = mcqValue();
     value.timeLimitSeconds = 30;

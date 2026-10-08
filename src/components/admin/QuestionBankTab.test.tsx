@@ -137,6 +137,17 @@ describe("QuestionBankTab — per-version duration", () => {
     await waitFor(() => expect(listQuestions).toHaveBeenCalledWith(9));
   });
 
+  it("toggles Listening for a version", async () => {
+    renderTab();
+    await screen.findByText("A");
+
+    const box = await screen.findByLabelText(/Listening for version A/);
+    expect(box).not.toBeChecked();
+    fireEvent.click(box);
+
+    await waitFor(() => expect(updateVersion).toHaveBeenCalledWith(1, { listeningEnabled: true }));
+  });
+
   it("creates a new version with the chosen duration", async () => {
     renderTab();
     await screen.findByText("A");

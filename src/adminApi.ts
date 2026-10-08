@@ -38,7 +38,7 @@ export const createVersion = (code: string, name: string, durationSeconds?: numb
   });
 export const updateVersion = (
   id: number,
-  fields: { code?: string; name?: string; durationSeconds?: number }
+  fields: { code?: string; name?: string; durationSeconds?: number; listeningEnabled?: boolean }
 ) =>
   req<{ ok: true }>(`/api/admin/versions/${id}`, {
     method: "PUT",
@@ -65,7 +65,7 @@ export const deleteQuestion = (id: number) =>
 // shapes live on each side, so an admin feature doesn't force a publish of the shared
 // package. Keep the two copies in step.
 
-export const EXAM_BUNDLE_FORMAT_VERSION = 1;
+export const EXAM_BUNDLE_FORMAT_VERSION = 2;
 
 export interface BundleOption {
   key: string;
@@ -92,6 +92,8 @@ export interface BundleVersion {
   code: string;
   name: string;
   durationSeconds: number;
+  /** Absent in format 1 files (read as false). */
+  listeningEnabled?: boolean;
   questions: BundleQuestion[];
 }
 
