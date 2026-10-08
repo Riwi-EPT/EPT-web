@@ -1,5 +1,5 @@
 import type { ResultDTO } from "@riwi-ept/shared";
-import { Award, Printer, RefreshCw, BookOpen, FileText } from "lucide-react";
+import { Award, Printer, RefreshCw, BookOpen, FileText, Headphones } from "lucide-react";
 
 interface ReviewTabProps {
   result: ResultDTO;
@@ -33,7 +33,7 @@ function ScoreBar({ label, score, max, percentage, icon }: {
 }
 
 export default function ReviewTab({ result, onReset }: ReviewTabProps) {
-  const { studentInfo, reading, writing, overall } = result;
+  const { studentInfo, reading, listening, writing, overall } = result;
   const issuedDate = studentInfo.date ?? new Date().toLocaleDateString();
 
   return (
@@ -68,8 +68,12 @@ export default function ReviewTab({ result, onReset }: ReviewTabProps) {
         </div>
       </div>
 
-      {/* Section scores — forced 2-col even at print width (paper width falls below `md`) */}
-      <div className="grid md:grid-cols-2 print:grid-cols-2 gap-4 print:gap-2">
+      {/* Section scores — column count forced even at print width (paper width falls below `md`) */}
+      <div
+        className={`grid gap-4 print:gap-2 ${
+          listening ? "md:grid-cols-3 print:grid-cols-3" : "md:grid-cols-2 print:grid-cols-2"
+        }`}
+      >
         <ScoreBar
           label="Reading"
           score={reading.score}
@@ -77,6 +81,15 @@ export default function ReviewTab({ result, onReset }: ReviewTabProps) {
           percentage={reading.percentage}
           icon={<BookOpen size={16} className="text-indigo-600" />}
         />
+        {listening && (
+          <ScoreBar
+            label="Listening"
+            score={listening.score}
+            max={listening.max}
+            percentage={listening.percentage}
+            icon={<Headphones size={16} className="text-indigo-600" />}
+          />
+        )}
         <ScoreBar
           label="Writing"
           score={writing.score}
