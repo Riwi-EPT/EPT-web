@@ -1,4 +1,10 @@
-import type { AdminQuestionDTO, AdminVersionDTO } from "@riwi-ept/shared";
+import type {
+  AdminAttemptDetailDTO,
+  AdminQuestionDTO,
+  AdminResultHistoryDTO,
+  AdminResultsPageDTO,
+  AdminVersionDTO,
+} from "@riwi-ept/shared";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -132,3 +138,29 @@ export interface BlockedEmailDTO {
 export const listBlockedEmails = () => req<BlockedEmailDTO[]>("/api/admin/blocked-emails");
 export const unblockEmail = (id: number) =>
   req<{ ok: true }>(`/api/admin/blocked-emails/${id}`, { method: "DELETE" });
+
+// ── Results & history ─────────────────────────────────────────────────────────
+
+export interface ResultFilters {
+  q?: string;
+  version?: string;
+  /** ISO date (YYYY-MM-DD), inclusive. */
+  from?: string;
+  /** ISO date (YYYY-MM-DD), inclusive. */
+  to?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export const listResults = (filters: ResultFilters = {}) => {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(filters)) {
+    if (v !== undefined && v !== "") params.set(k, String(v));
+  }
+  const qs = params.toString();
+  return req<AdminResultsPageDTO>(`/api/admin/results${qs ? `?${qs}` : ""}`);
+};
+export const getResultHistory = (identity: string) =>
+  req<AdminResultHistoryDTO>(`/api/admin/results/history?identity=${encodeURIComponent(identity)}`);
+export const getResultDetail = (attemptId: number) =>
+  req<AdminAttemptDetailDTO>(`/api/admin/results/${attemptId}`);

@@ -6,7 +6,7 @@ interface ReviewTabProps {
   onReset: () => void;
 }
 
-function ScoreBar({ label, score, max, percentage, icon }: {
+export function ScoreBar({ label, score, max, percentage, icon }: {
   label: string;
   score: number;
   max: number;

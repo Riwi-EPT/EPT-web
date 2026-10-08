@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { X, LogOut, Database, Unlock, ShieldCheck } from "lucide-react";
+import { X, LogOut, Database, Unlock, ShieldCheck, ClipboardList } from "lucide-react";
 import { adminLogin, adminLogout, adminSession } from "../adminApi";
 import Overlay from "./admin/Overlay";
 import AdminLogin from "./admin/AdminLogin";
 import QuestionBankTab from "./admin/QuestionBankTab";
 import AccessControlTab from "./admin/AccessControlTab";
+import ResultsTab from "./admin/ResultsTab";
 import ConfirmDialog, { type ConfirmRequest } from "./admin/ConfirmDialog";
 
 interface AdminPanelProps {
@@ -15,7 +16,7 @@ interface AdminPanelProps {
   currentVersion: string;
 }
 
-type Tab = "questions" | "access";
+type Tab = "questions" | "results" | "access";
 
 export default function AdminPanel({
   onClose,
@@ -76,6 +77,7 @@ export default function AdminPanel({
           <div className="flex gap-1 px-6 pt-3 border-b border-slate-100">
             {([
               { id: "questions", label: "Question Bank", icon: <Database size={14} /> },
+              { id: "results", label: "Resultados", icon: <ClipboardList size={14} /> },
               { id: "access", label: "Access Control", icon: <Unlock size={14} /> },
             ] as const).map((t) => (
               <button
@@ -104,6 +106,8 @@ export default function AdminPanel({
           <div className="flex-1 overflow-hidden">
             {tab === "questions" ? (
               <QuestionBankTab requestConfirm={setConfirm} setError={setError} />
+            ) : tab === "results" ? (
+              <ResultsTab setError={setError} />
             ) : (
               <AccessControlTab
                 currentStudentEmail={currentStudentEmail}
