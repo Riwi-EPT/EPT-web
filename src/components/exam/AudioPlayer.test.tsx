@@ -13,7 +13,7 @@ vi.mock("../../api", async (importActual) => {
   };
 });
 
-import AudioPlayer from "./AudioPlayer";
+import AudioPlayer, { PLAY_START_TIMEOUT_MS } from "./AudioPlayer";
 import { ApiError } from "../../api";
 
 const TRACK: AudioAssetDTO = { id: 5, title: "Airport announcement", durationSeconds: 42, maxPlays: 2 };
@@ -63,5 +63,23 @@ describe("AudioPlayer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Play audio" }));
     await waitFor(() => expect(onPlayRegistered).toHaveBeenCalledWith(5, 2));
     expect(fetchAudioBlob).not.toHaveBeenCalled();
+  });
+
+  it("stops waiting and shows an error when playback never starts", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      registerAudioPlay.mockResolvedValue({ playsUsed: 1, maxPlays: 2 });
+      window.HTMLMediaElement.prototype.play = vi.fn(() => new Promise<void>(() => {}));
+      render(<AudioPlayer audio={TRACK} playsUsed={0} onPlayRegistered={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Play audio" }));
+      await waitFor(() => expect(window.HTMLMediaElement.prototype.play).toHaveBeenCalled());
+      await vi.advanceTimersByTimeAsync(PLAY_START_TIMEOUT_MS + 100);
+
+      await waitFor(() => expect(screen.getByText(/could not be played/)).toBeTruthy());
+      expect((screen.getByRole("button", { name: "Play audio" }) as HTMLButtonElement).disabled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

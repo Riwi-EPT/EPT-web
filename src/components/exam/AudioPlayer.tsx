@@ -4,6 +4,9 @@ import type { AudioAssetDTO } from "@riwi-ept/shared";
 import { ApiError, fetchAudioBlob, registerAudioPlay } from "../../api";
 import { formatTimer } from "../../lib/format";
 
+/** How long to wait for playback to actually start before showing an error. */
+export const PLAY_START_TIMEOUT_MS = 8000;
+
 export interface AudioPlayerProps {
   audio: AudioAssetDTO;
   playsUsed: number;
@@ -65,9 +68,20 @@ export default function AudioPlayer({ audio, playsUsed, onPlayRegistered }: Audi
         setProgress(1);
         release();
       };
-      await el.play();
+      // play() can stay pending forever (e.g. a hidden tab or a blocked output
+      // device). Give up after a while so the player never spins indefinitely;
+      // the play is already spent server-side either way.
+      await Promise.race([
+        el.play(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("play_timeout")), PLAY_START_TIMEOUT_MS)
+        ),
+      ]);
       setState("playing");
     } catch (err) {
+      elRef.current?.pause();
+      elRef.current = null;
+      release();
       setState("idle");
       if (err instanceof ApiError && (err.body as { reason?: string } | null)?.reason === "plays_exhausted") {
         onPlayRegistered(audio.id, audio.maxPlays);
