@@ -160,4 +160,13 @@ describe("QuestionBankTab — per-version duration", () => {
 
     await waitFor(() => expect(createVersion).toHaveBeenCalledWith("E", "Version E", 2700));
   });
+
+  it("shows the scoring panel for the selected version and reloads after saving", async () => {
+    renderTab();
+    fireEvent.click(await screen.findByRole("button", { name: "Save scoring" }));
+    await waitFor(() =>
+      expect(updateVersion).toHaveBeenCalledWith(1, { scoring: expect.objectContaining({ issuesLevel: true }) })
+    );
+    await waitFor(() => expect(listVersions).toHaveBeenCalledTimes(2));
+  });
 });
