@@ -7,13 +7,24 @@ import type {
 } from "@riwi-ept/shared";
 import { BookOpen, ChevronLeft, ChevronRight, FileText, Headphones, History, Search, X } from "lucide-react";
 import { listResults, getResultHistory, getResultDetail, type ResultFilters } from "../../adminApi";
-import { ScoreBar } from "../ReviewTab";
+import { ScoreBar, sectionPercentage } from "../ReviewTab";
 
 const PAGE_SIZE = 25;
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+}
+
+function ProvisionalBadge() {
+  return (
+    <span
+      title="A writing task fell back to the heuristic grader"
+      className="inline-block px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold"
+    >
+      Provisional
+    </span>
+  );
 }
 
 function sectionCell(s: AdminSectionScoreDTO | null): string {
@@ -158,6 +169,12 @@ export default function ResultsTab({ setError }: { setError: (msg: string | null
                   <td className="px-3 py-2 font-bold">
                     {r.cefr ?? "—"}
                     {r.band != null && <span className="font-normal text-slate-400"> · {r.band}</span>}
+                    {r.provisional && (
+                      <>
+                        {" "}
+                        <ProvisionalBadge />
+                      </>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-right">
                     {r.attemptCount > 1 && (
@@ -261,13 +278,19 @@ export default function ResultsTab({ setError }: { setError: (msg: string | null
             {detail.studentInfo.email} · {detail.versionCode} · {formatDate(detail.submittedAt)}
           </p>
           <p className="text-sm font-black text-slate-800">
-            CEFR {detail.overall.cefr} · band {detail.overall.band} · {detail.overall.percentage}%
+            {detail.overall.cefr != null
+              ? `CEFR ${detail.overall.cefr}${detail.overall.band != null ? ` · band ${detail.overall.band}` : ""} · `
+              : "No level issued · "}
+            {detail.overall.percentage}%
           </p>
+          {detail.provisional === true && <ProvisionalBadge />}
           <ScoreBar
             label="Reading"
             score={detail.reading.score}
             max={detail.reading.max}
-            percentage={detail.reading.percentage}
+            percentage={sectionPercentage(detail.reading)}
+            cefr={detail.reading.cefr}
+            band={detail.reading.band}
             icon={<BookOpen size={16} className="text-indigo-600" />}
           />
           {detail.listening && (
@@ -275,7 +298,9 @@ export default function ResultsTab({ setError }: { setError: (msg: string | null
               label="Listening"
               score={detail.listening.score}
               max={detail.listening.max}
-              percentage={detail.listening.percentage}
+              percentage={sectionPercentage(detail.listening)}
+              cefr={detail.listening.cefr}
+              band={detail.listening.band}
               icon={<Headphones size={16} className="text-indigo-600" />}
             />
           )}
@@ -283,7 +308,9 @@ export default function ResultsTab({ setError }: { setError: (msg: string | null
             label="Writing"
             score={detail.writing.score}
             max={detail.writing.max}
-            percentage={detail.writing.max ? Math.round((detail.writing.score / detail.writing.max) * 100) : 0}
+            percentage={sectionPercentage(detail.writing)}
+            cefr={detail.writing.cefr}
+            band={detail.writing.band}
             icon={<FileText size={16} className="text-indigo-600" />}
           />
           {detail.writing.tasks.map((t) => (
@@ -291,9 +318,17 @@ export default function ResultsTab({ setError }: { setError: (msg: string | null
               <div className="flex justify-between font-semibold text-slate-800">
                 <span>Task {t.number}</span>
                 <span className="font-mono text-slate-500">
-                  {t.score}/{t.max} · CEFR {t.cefr}
+                  {t.score}/{t.max}
+                  {t.cefr != null ? ` · CEFR ${t.cefr}` : ""}
                 </span>
               </div>
+              {(t.grader || t.modelCefr) && (
+                <div className="text-[10px] font-mono text-slate-400">
+                  {t.grader && <>graded by {t.grader}</>}
+                  {t.grader && t.modelCefr && " · "}
+                  {t.modelCefr && <>model {t.modelCefr}</>}
+                </div>
+              )}
               {t.feedback && <p className="text-slate-600 whitespace-pre-wrap">{t.feedback}</p>}
               {t.corrections && (
                 <p className="text-slate-500 whitespace-pre-wrap">

@@ -8,6 +8,7 @@ import {
   listQuestions, createQuestion, updateQuestion, deleteQuestion,
 } from "../../adminApi";
 import QuestionForm from "./QuestionForm";
+import ScoringPanel from "./ScoringPanel";
 import type { ConfirmRequest } from "./ConfirmDialog";
 
 // Mirrors the server-side bounds in routes/admin.ts (60s..8h) so an out-of-range
@@ -251,6 +252,8 @@ export default function QuestionBankTab({
     }
   };
 
+  const selectedVersion = versions.find((v) => v.id === selectedVersionId);
+
   return (
     <div className="flex h-full">
       {/* Versions sidebar */}
@@ -409,6 +412,15 @@ export default function QuestionBankTab({
           />
         ) : (
           <>
+            {selectedVersion && (
+              <ScoringPanel
+                key={`${selectedVersion.id}:${selectedVersion.listeningEnabled ?? false}:${JSON.stringify(selectedVersion.scoring ?? null)}`}
+                version={selectedVersion}
+                onSaved={() => {
+                  loadVersions().catch((e) => setError(String(e)));
+                }}
+              />
+            )}
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-slate-700">Questions ({questions.length})</h3>
               <button

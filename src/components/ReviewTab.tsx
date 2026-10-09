@@ -1,17 +1,26 @@
 import type { ResultDTO } from "@riwi-ept/shared";
-import { Award, Printer, RefreshCw, BookOpen, FileText, Headphones } from "lucide-react";
+import { Award, Printer, RefreshCw, BookOpen, FileText, Headphones, Info } from "lucide-react";
 
 interface ReviewTabProps {
   result: ResultDTO;
   onReset: () => void;
 }
 
-export function ScoreBar({ label, score, max, percentage, icon }: {
+/** Percentage of a section, tolerating results stored before `percentage` was always set. */
+export function sectionPercentage(s: { score: number; max: number; percentage?: number }): number {
+  if (typeof s.percentage === "number") return s.percentage;
+  return s.max ? Math.round((s.score / s.max) * 100) : 0;
+}
+
+export function ScoreBar({ label, score, max, percentage, icon, cefr, band }: {
   label: string;
   score: number;
   max: number;
   percentage: number;
   icon: React.ReactNode;
+  /** Per-skill level; omitted/null (scores-only version or legacy result) hides it. */
+  cefr?: string | null;
+  band?: number | null;
 }) {
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-5 print:p-3">
@@ -27,13 +36,21 @@ export function ScoreBar({ label, score, max, percentage, icon }: {
       <div className="h-2 bg-slate-100 rounded-full overflow-hidden print:hidden">
         <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${percentage}%` }} />
       </div>
-      <div className="text-right text-[11px] font-mono text-slate-400 mt-1 print:mt-0">{percentage}%</div>
+      <div className="flex justify-between items-baseline mt-1 print:mt-0">
+        <span className="text-xs font-bold text-slate-700">
+          {cefr ? `CEFR ${cefr}${band != null ? ` · band ${band}` : ""}` : ""}
+        </span>
+        <span className="text-[11px] font-mono text-slate-400">{percentage}%</span>
+      </div>
     </div>
   );
 }
 
 export default function ReviewTab({ result, onReset }: ReviewTabProps) {
   const { studentInfo, reading, listening, writing, overall } = result;
+  // Results stored before the scoring redesign lack `provisional` and per-section levels.
+  const provisional = result.provisional === true;
+  const issuesLevel = overall.cefr != null;
   const issuedDate = studentInfo.date ?? new Date().toLocaleDateString();
 
   return (
@@ -57,16 +74,41 @@ export default function ReviewTab({ result, onReset }: ReviewTabProps) {
             <p className="text-[11px] font-mono uppercase tracking-widest text-indigo-300">
               {studentInfo.name} · {studentInfo.email}
             </p>
-            <h2 className="text-3xl print:text-2xl font-black mt-2 print:mt-1">Overall CEFR: {overall.cefr}</h2>
-            <p className="text-sm text-slate-300 mt-1">
-              RIWI band {overall.band} · {overall.score}/{overall.max} ({overall.percentage}%)
-            </p>
+            {issuesLevel ? (
+              <>
+                <h2 className="text-3xl print:text-2xl font-black mt-2 print:mt-1">Overall CEFR: {overall.cefr}</h2>
+                <p className="text-sm text-slate-300 mt-1">
+                  {overall.band != null && <>RIWI band {overall.band} · </>}
+                  {overall.score}/{overall.max} ({overall.percentage}%)
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-3xl print:text-2xl font-black mt-2 print:mt-1">
+                  Score: {overall.score}/{overall.max} ({overall.percentage}%)
+                </h2>
+                <p className="text-sm text-slate-300 mt-1">This test version does not issue a CEFR level.</p>
+              </>
+            )}
           </div>
           <div className="w-20 h-20 print:w-14 print:h-14 rounded-2xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center shrink-0">
             <Award size={36} className="text-indigo-200 print:size-6" />
           </div>
         </div>
       </div>
+
+      {provisional && (
+        <div
+          role="status"
+          className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 print:p-2"
+        >
+          <Info size={14} className="shrink-0 mt-0.5" />
+          <span>
+            <strong>Provisional result.</strong> Your writing was scored automatically and may be reviewed;
+            your level can change after review.
+          </span>
+        </div>
+      )}
 
       {/* Section scores — column count forced even at print width (paper width falls below `md`) */}
       <div
@@ -78,7 +120,9 @@ export default function ReviewTab({ result, onReset }: ReviewTabProps) {
           label="Reading"
           score={reading.score}
           max={reading.max}
-          percentage={reading.percentage}
+          percentage={sectionPercentage(reading)}
+          cefr={reading.cefr}
+          band={reading.band}
           icon={<BookOpen size={16} className="text-indigo-600" />}
         />
         {listening && (
@@ -86,7 +130,9 @@ export default function ReviewTab({ result, onReset }: ReviewTabProps) {
             label="Listening"
             score={listening.score}
             max={listening.max}
-            percentage={listening.percentage}
+            percentage={sectionPercentage(listening)}
+            cefr={listening.cefr}
+            band={listening.band}
             icon={<Headphones size={16} className="text-indigo-600" />}
           />
         )}
@@ -94,7 +140,9 @@ export default function ReviewTab({ result, onReset }: ReviewTabProps) {
           label="Writing"
           score={writing.score}
           max={writing.max}
-          percentage={writing.max ? Math.round((writing.score / writing.max) * 100) : 0}
+          percentage={sectionPercentage(writing)}
+          cefr={writing.cefr}
+          band={writing.band}
           icon={<FileText size={16} className="text-indigo-600" />}
         />
       </div>
@@ -110,7 +158,8 @@ export default function ReviewTab({ result, onReset }: ReviewTabProps) {
             >
               <span className="text-sm font-semibold text-slate-800">Task {t.number}</span>
               <span className="text-xs font-mono text-slate-500">
-                {t.score}/{t.max} · CEFR {t.cefr}
+                {t.score}/{t.max}
+                {issuesLevel && t.cefr ? ` · CEFR ${t.cefr}` : ""}
               </span>
             </div>
           ))}

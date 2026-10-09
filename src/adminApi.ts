@@ -4,6 +4,7 @@ import type {
   AdminResultHistoryDTO,
   AdminResultsPageDTO,
   AdminVersionDTO,
+  VersionScoringConfig,
 } from "@riwi-ept/shared";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -44,7 +45,14 @@ export const createVersion = (code: string, name: string, durationSeconds?: numb
   });
 export const updateVersion = (
   id: number,
-  fields: { code?: string; name?: string; durationSeconds?: number; listeningEnabled?: boolean }
+  fields: {
+    code?: string;
+    name?: string;
+    durationSeconds?: number;
+    listeningEnabled?: boolean;
+    /** Overrides to store; null resets the version to the server defaults; omitted = unchanged. */
+    scoring?: Partial<VersionScoringConfig> | null;
+  }
 ) =>
   req<{ ok: true }>(`/api/admin/versions/${id}`, {
     method: "PUT",

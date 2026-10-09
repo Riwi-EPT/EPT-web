@@ -26,6 +26,7 @@ const row = (attemptId: number, extra: Partial<AdminResultRowDTO> = {}): AdminRe
   overallPercentage: 70,
   cefr: "B1",
   band: 3,
+  provisional: false,
   attemptCount: 2,
   ...extra,
 });
@@ -37,15 +38,30 @@ const DETAIL: AdminAttemptDetailDTO = {
   versionCode: "A",
   submittedAt: "2026-10-01T10:00:00.000Z",
   studentInfo: { name: "Ana Pérez", email: "ana@example.com" },
-  reading: { score: 8, max: 10, percentage: 80 },
+  reading: { score: 8, max: 10, percentage: 80, cefr: "B2", band: 4 },
   writing: {
     score: 6,
     max: 10,
+    percentage: 60,
+    cefr: "B1",
+    band: 3,
     tasks: [
-      { questionId: 5, number: 1, score: 6, max: 10, cefr: "B1", feedback: "Good structure.", corrections: "" },
+      {
+        questionId: 5,
+        number: 1,
+        score: 6,
+        max: 10,
+        cefr: "B1",
+        modelCefr: "B2",
+        grader: "openai",
+        feedback: "Good structure.",
+        corrections: "",
+      },
     ],
   },
   overall: { score: 14, max: 20, percentage: 70, cefr: "B1", band: 3 },
+  provisional: false,
+  scoringVersion: 2,
   summary: "Solid B1.",
 };
 
@@ -94,5 +110,41 @@ describe("ResultsTab", () => {
     const panel = await screen.findByLabelText("Attempt detail");
     expect(getResultDetail).toHaveBeenCalledWith(2);
     expect(panel).toHaveTextContent("Good structure.");
+  });
+
+  it("marks provisional rows in the list", async () => {
+    listResults.mockResolvedValue({ rows: [row(2, { provisional: true })], total: 1, page: 1, pageSize: 25 });
+    render(<ResultsTab setError={vi.fn()} />);
+    await screen.findByText("ana@example.com");
+    expect(screen.getByText("Provisional")).toBeInTheDocument();
+  });
+
+  it("shows grader, model CEFR and the provisional flag in the detail", async () => {
+    getResultDetail.mockResolvedValue({ ...DETAIL, provisional: true });
+    render(<ResultsTab setError={vi.fn()} />);
+    fireEvent.click(await screen.findByText("ana@example.com"));
+
+    const panel = await screen.findByLabelText("Attempt detail");
+    expect(panel).toHaveTextContent("Provisional");
+    expect(panel).toHaveTextContent("openai");
+    expect(panel).toHaveTextContent("model B2");
+    expect(panel).toHaveTextContent("CEFR B2 · band 4");
+  });
+
+  it("omits the task CEFR when the version issued none", async () => {
+    const task = { ...DETAIL.writing!.tasks[0], cefr: null, modelCefr: null };
+    getResultDetail.mockResolvedValue({
+      ...DETAIL,
+      reading: { ...DETAIL.reading, cefr: null, band: null },
+      writing: { ...DETAIL.writing!, cefr: null, band: null, tasks: [task] },
+      overall: { ...DETAIL.overall, cefr: null, band: null },
+    });
+    render(<ResultsTab setError={vi.fn()} />);
+    fireEvent.click(await screen.findByText("ana@example.com"));
+
+    const panel = await screen.findByLabelText("Attempt detail");
+    expect(panel).toHaveTextContent("6/10");
+    expect(panel).not.toHaveTextContent("null");
+    expect(panel).not.toHaveTextContent(/CEFR/);
   });
 });
