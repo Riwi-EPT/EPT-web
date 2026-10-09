@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { AdminQuestionDTO, AdminVersionDTO } from "@riwi-ept/shared";
 import type { ImportedVersionSummary } from "../../adminApi";
-import { Layers, Plus, Trash2, Star, Clock, ArrowDownUp } from "lucide-react";
+import { Layers, Plus, Trash2, Star, Clock, ArrowDownUp, Headphones } from "lucide-react";
 import ImportExportModal from "./ImportExportModal";
 import {
   listVersions, createVersion, updateVersion, deleteVersion, activateVersion,
@@ -240,6 +240,17 @@ export default function QuestionBankTab({
     }
   };
 
+  /** Turn the fixed Listening audio on/off for a version. Commits on change. */
+  const toggleListening = async (v: AdminVersionDTO, listeningEnabled: boolean) => {
+    setError(null);
+    try {
+      await updateVersion(v.id, { listeningEnabled });
+      await loadVersions();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not update Listening.");
+    }
+  };
+
   return (
     <div className="flex h-full">
       {/* Versions sidebar */}
@@ -303,6 +314,21 @@ export default function QuestionBankTab({
                 className="w-12 rounded border border-slate-200 px-1 py-0.5 text-[10px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
               />
               min
+            </label>
+
+            {/* Listening plays the one fixed audio; off by default. */}
+            <label
+              className="flex items-center gap-1.5 mt-1.5 text-[10px] text-slate-500"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Headphones size={11} className="shrink-0" />
+              <input
+                type="checkbox"
+                aria-label={`Listening for version ${v.code}`}
+                checked={v.listeningEnabled ?? false}
+                onChange={(e) => toggleListening(v, e.target.checked)}
+              />
+              Listening
             </label>
 
             <div className="flex gap-2 mt-1.5">

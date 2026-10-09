@@ -1,11 +1,20 @@
+import type { ReactNode } from "react";
 import {
-  AlarmClock, Send, ChevronRight, GraduationCap, Settings, BookOpen, FileText,
+  AlarmClock, Send, ChevronRight, GraduationCap, Settings, BookOpen, FileText, Headphones,
 } from "lucide-react";
 import type { ExamDTO, QuestionDTO } from "@riwi-ept/shared";
 import type { ExamTab, AnswersMap } from "./types";
 import ReadingSection from "./ReadingSection";
+import ListeningSection from "./ListeningSection";
 import WritingSection from "./WritingSection";
 import { formatTimer, wordCount } from "../../lib/format";
+import { SECTION_LABEL, nextSection } from "../../lib/sections";
+
+const SECTION_ICON: Record<ExamTab, ReactNode> = {
+  reading: <BookOpen size={14} />,
+  listening: <Headphones size={14} />,
+  writing: <FileText size={14} />,
+};
 
 export interface ExamShellProps {
   studentName: string;
@@ -14,8 +23,9 @@ export interface ExamShellProps {
   setActiveTab: (tab: ExamTab) => void;
   examData: ExamDTO | null;
   examError: string | null;
-  readingQuestions: QuestionDTO[];
-  writingQuestions: QuestionDTO[];
+  /** The sections this version has, in the order they are taken. */
+  sections: ExamTab[];
+  questionsBySkill: Record<ExamTab, QuestionDTO[]>;
   answers: AnswersMap;
   updateMcq: (questionId: number, key: string) => void;
   updateTopic: (questionId: number, key: string) => void;
@@ -23,12 +33,13 @@ export interface ExamShellProps {
   onSubmitClick: () => void;
   onOpenAdmin: () => void;
   /** Furthest-reached (server-validated) question index within each skill. */
-  readingIndex: number;
-  writingIndex: number;
+  sectionIndex: Record<ExamTab, number>;
   /** Server-mirrored countdown for the currently-active skill's live question. */
   questionSecondsLeft: number | null;
-  onNextReading: () => void;
-  onNextWriting: () => void;
+  onNext: (tab: ExamTab) => void;
+  /** Listening plays already spent per audio track in this attempt. */
+  audioPlays: Record<number, number>;
+  onPlayRegistered: (audioId: number, playsUsed: number) => void;
 }
 
 export default function ExamShell({
@@ -38,22 +49,34 @@ export default function ExamShell({
   setActiveTab,
   examData,
   examError,
-  readingQuestions,
-  writingQuestions,
+  sections,
+  questionsBySkill,
   answers,
   updateMcq,
   updateTopic,
   updateText,
   onSubmitClick,
   onOpenAdmin,
-  readingIndex,
-  writingIndex,
+  sectionIndex,
   questionSecondsLeft,
-  onNextReading,
-  onNextWriting,
+  onNext,
+  audioPlays,
+  onPlayRegistered,
 }: ExamShellProps) {
-  const readingAnswered = readingQuestions.filter((q) => answers[q.id]?.selectedKey).length;
-  const writingAnswered = writingQuestions.filter((q) => (answers[q.id]?.text ?? "").trim()).length;
+  const answeredIn = (tab: ExamTab) =>
+    questionsBySkill[tab].filter((q) =>
+      tab === "writing" ? (answers[q.id]?.text ?? "").trim() : answers[q.id]?.selectedKey
+    ).length;
+
+  // Finishing an MCQ section moves to the next one; the last section submits.
+  const finishProps = (tab: ExamTab) => {
+    const next = nextSection(sections, tab);
+    return next
+      ? { onFinish: () => setActiveTab(next), finishLabel: `Continue to ${SECTION_LABEL[next]}` }
+      : { onFinish: onSubmitClick, finishLabel: "Submit Exam" };
+  };
+
+  const liveSecondsLeft = (tab: ExamTab) => (activeTab === tab ? questionSecondsLeft : null);
 
   return (
     <div className="min-h-screen bg-slate-50/70 font-sans text-slate-800 flex flex-col">
@@ -93,15 +116,12 @@ export default function ExamShell({
           <h3 className="text-[10px] font-mono text-slate-400 uppercase tracking-widest px-3 mb-3 block">
             TEST SECTIONS
           </h3>
-          {([
-            { id: "reading", label: "Part 1 — Reading", icon: <BookOpen size={14} />, n: 1 },
-            { id: "writing", label: "Part 2 — Writing", icon: <FileText size={14} />, n: 2 },
-          ] as const).map((tab) => (
+          {sections.map((id, i) => (
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              key={id}
+              onClick={() => setActiveTab(id)}
               className={`w-full text-left p-3.5 rounded-lg text-xs font-medium transition-all flex items-center justify-between cursor-pointer border ${
-                activeTab === tab.id
+                activeTab === id
                   ? "bg-indigo-600 text-white border-indigo-600 font-semibold"
                   : "bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50/50"
               }`}
@@ -109,14 +129,15 @@ export default function ExamShell({
               <span className="flex items-center gap-2">
                 <span
                   className={`w-5 h-5 flex items-center justify-center rounded text-[10px] ${
-                    activeTab === tab.id ? "bg-indigo-700 text-white" : "bg-slate-100 text-slate-600"
+                    activeTab === id ? "bg-indigo-700 text-white" : "bg-slate-100 text-slate-600"
                   }`}
                 >
-                  {tab.n}
+                  {i + 1}
                 </span>
-                {tab.label}
+                {SECTION_ICON[id]}
+                Part {i + 1} — {SECTION_LABEL[id]}
               </span>
-              <ChevronRight size={14} className={activeTab === tab.id ? "text-indigo-200" : "text-slate-400"} />
+              <ChevronRight size={14} className={activeTab === id ? "text-indigo-200" : "text-slate-400"} />
             </button>
           ))}
 
@@ -124,12 +145,11 @@ export default function ExamShell({
             <div className="font-mono text-[10px] text-slate-400 uppercase tracking-widest font-bold">
               Progreso
             </div>
-            <div>
-              <strong>Reading:</strong> {readingAnswered}/{readingQuestions.length}
-            </div>
-            <div>
-              <strong>Writing:</strong> {writingAnswered}/{writingQuestions.length}
-            </div>
+            {sections.map((id) => (
+              <div key={id}>
+                <strong>{SECTION_LABEL[id]}:</strong> {answeredIn(id)}/{questionsBySkill[id].length}
+              </div>
+            ))}
           </div>
 
           <button
@@ -146,27 +166,40 @@ export default function ExamShell({
           {!examData && !examError && <div className="p-8 text-sm text-slate-500">Loading exam…</div>}
           {examData && activeTab === "reading" && (
             <ReadingSection
-              questions={readingQuestions}
+              questions={questionsBySkill.reading}
               answers={answers}
               updateMcq={updateMcq}
-              setActiveTab={setActiveTab}
-              currentIndex={readingIndex}
-              questionSecondsLeft={activeTab === "reading" ? questionSecondsLeft : null}
-              onNext={onNextReading}
+              currentIndex={sectionIndex.reading}
+              questionSecondsLeft={liveSecondsLeft("reading")}
+              onNext={() => onNext("reading")}
+              {...finishProps("reading")}
+            />
+          )}
+          {examData && activeTab === "listening" && (
+            <ListeningSection
+              questions={questionsBySkill.listening}
+              answers={answers}
+              updateMcq={updateMcq}
+              currentIndex={sectionIndex.listening}
+              questionSecondsLeft={liveSecondsLeft("listening")}
+              onNext={() => onNext("listening")}
+              {...finishProps("listening")}
+              audio={examData.audio ?? []}
+              audioPlays={audioPlays}
+              onPlayRegistered={onPlayRegistered}
             />
           )}
           {examData && activeTab === "writing" && (
             <WritingSection
-              questions={writingQuestions}
+              questions={questionsBySkill.writing}
               answers={answers}
               updateTopic={updateTopic}
               updateText={updateText}
               wordCount={wordCount}
               setShowSubmitModal={onSubmitClick}
-              setActiveTab={setActiveTab}
-              currentIndex={writingIndex}
-              questionSecondsLeft={activeTab === "writing" ? questionSecondsLeft : null}
-              onNext={onNextWriting}
+              currentIndex={sectionIndex.writing}
+              questionSecondsLeft={liveSecondsLeft("writing")}
+              onNext={() => onNext("writing")}
             />
           )}
         </main>

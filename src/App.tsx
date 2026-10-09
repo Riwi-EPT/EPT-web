@@ -6,8 +6,9 @@ import type { ExamTab, AnswersMap } from "./components/exam/types";
 import {
   fetchExam, submitExam, decodeExamToken, checkBlockStatus, reportBlock, ApiError,
   startAttempt, saveAnswers, getAttemptToken, clearAttemptToken,
-  startQuestion, fetchQuestionProgress,
+  startQuestion, fetchQuestionProgress, fetchAudioPlays,
 } from "./api";
+import { groupBySkill, presentSections, nextSection } from "./lib/sections";
 import {
   isLtiMode, examVersion, storage, keys,
   EXAM_DURATION_SECONDS, ATTEMPTS_KEY,
@@ -21,6 +22,9 @@ import BlockedScreen from "./components/screens/BlockedScreen";
 import GradingScreen from "./components/screens/GradingScreen";
 import ResultsScreen from "./components/screens/ResultsScreen";
 import ExamShell from "./components/exam/ExamShell";
+
+const ZERO_INDEX: Record<ExamTab, number> = { reading: 0, listening: 0, writing: 0 };
+const NO_EXPIRY: Record<ExamTab, string | null> = { reading: null, listening: null, writing: null };
 
 export default function App() {
   const [studentInfo, setStudentInfo] = useState<StudentInfo | null>(() => {
@@ -58,14 +62,19 @@ export default function App() {
   // ── Per-question pacing (one-at-a-time nav + optional per-question timer) ────
   // Same anti-cheat doctrine as the whole-exam clock above: the server computes
   // and enforces every per-question deadline (see POST /api/exam/question/start);
-  // these are only ever a mirror of it. `readingIndex`/`writingIndex` are the
+  // these are only ever a mirror of it. `sectionIndex` holds the
   // furthest-reached (server-validated) question per skill — Back navigation
   // inside QuestionNavigator moves a separate, purely local view index and never
-  // touches these, which is what keeps Back from ever re-arming a clock.
-  const [readingIndex, setReadingIndex] = useState(0);
-  const [writingIndex, setWritingIndex] = useState(0);
-  const [readingExpiresAt, setReadingExpiresAt] = useState<string | null>(null);
-  const [writingExpiresAt, setWritingExpiresAt] = useState<string | null>(null);
+  // touches it, which is what keeps Back from ever re-arming a clock.
+  const [sectionIndex, setSectionIndex] = useState<Record<ExamTab, number>>(ZERO_INDEX);
+  const [sectionExpiresAt, setSectionExpiresAt] =
+    useState<Record<ExamTab, string | null>>(NO_EXPIRY);
+  const setIndexFor = (tab: ExamTab, n: number) =>
+    setSectionIndex((prev) => ({ ...prev, [tab]: n }));
+  const setExpiresAtFor = (tab: ExamTab, v: string | null) =>
+    setSectionExpiresAt((prev) => ({ ...prev, [tab]: v }));
+  // Listening plays spent per audio track — the server's count, mirrored.
+  const [audioPlays, setAudioPlays] = useState<Record<number, number>>({});
   // Ticks once a second while the exam is active, purely to re-derive
   // `questionSecondsLeft` below from a server-stamped deadline — never itself
   // trusted as the deadline.
@@ -242,35 +251,47 @@ export default function App() {
     if (!getAttemptToken()) return;
     let cancelled = false;
 
-    const readingQs = examData.questions.filter((q) => q.skill === "reading");
-    const writingQs = examData.questions.filter((q) => q.skill === "writing");
+    const bySkill = groupBySkill(examData.questions);
 
     fetchQuestionProgress()
       .then(({ progress }) => {
         if (cancelled || !progress.length) return;
         const byId = new Map(progress.map((p) => [p.questionId, p]));
 
-        const seed = (
-          qs: typeof readingQs,
-          setIndex: (n: number) => void,
-          setExpiresAt: (v: string | null) => void
-        ) => {
-          if (!qs.length) return;
+        for (const tab of Object.keys(bySkill) as ExamTab[]) {
+          const qs = bySkill[tab];
+          if (!qs.length) continue;
           let furthest = 0;
           for (let i = 0; i < qs.length; i++) {
             if (byId.has(qs[i].id)) furthest = i;
             else break;
           }
-          setIndex(furthest);
-          setExpiresAt(byId.get(qs[furthest].id)?.expiresAt ?? null);
-        };
-
-        seed(readingQs, setReadingIndex, setReadingExpiresAt);
-        seed(writingQs, setWritingIndex, setWritingExpiresAt);
+          setIndexFor(tab, furthest);
+          setExpiresAtFor(tab, byId.get(qs[furthest].id)?.expiresAt ?? null);
+        }
       })
       .catch(() => {
         // Fail open: worst case the navigator re-starts from question 1, which
         // is idempotent server-side and just costs a redundant (harmless) call.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [studentInfo, examData]);
+
+  // Same resume idea for listening: the plays already spent come from the server,
+  // so a reload can't hand back a fresh set of plays.
+  useEffect(() => {
+    if (!studentInfo || !examData?.audio?.length || evaluationResult || isBlocked) return;
+    if (!getAttemptToken()) return;
+    let cancelled = false;
+    fetchAudioPlays()
+      .then(({ plays }) => {
+        if (cancelled) return;
+        setAudioPlays(Object.fromEntries(plays.map((p) => [p.audioId, p.playsUsed])));
+      })
+      .catch(() => {
+        // Fail open on display only: the server still enforces the limit on Play.
       });
     return () => {
       cancelled = true;
@@ -284,14 +305,22 @@ export default function App() {
   useEffect(() => {
     if (!studentInfo || !examData || evaluationResult || isBlocked) return;
     const questions = examData.questions.filter((q) => q.skill === activeTab);
-    const index = activeTab === "reading" ? readingIndex : writingIndex;
-    const q = questions[index];
+    const tab = activeTab;
+    const q = questions[sectionIndex[tab]];
     if (!q) return;
-    const setExpiresAt = activeTab === "reading" ? setReadingExpiresAt : setWritingExpiresAt;
+    // A response that lands after the index/tab moved on belongs to an older
+    // question; writing it would give the live question a stale (possibly past)
+    // deadline and auto-advance past it.
+    let cancelled = false;
     startQuestion(q.id)
-      .then((res) => setExpiresAt(res.questionExpiresAt))
+      .then((res) => {
+        if (!cancelled) setExpiresAtFor(tab, res.questionExpiresAt);
+      })
       .catch((err) => console.warn("⚠️ Could not start this question:", err));
-  }, [activeTab, readingIndex, writingIndex, studentInfo, examData, evaluationResult, isBlocked]);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, sectionIndex, studentInfo, examData, evaluationResult, isBlocked]);
 
   // Tick once a second so questionSecondsLeft (derived below) stays live.
   useEffect(() => {
@@ -300,7 +329,10 @@ export default function App() {
     return () => clearInterval(interval);
   }, [isTimerRunning, studentInfo, evaluationResult, isBlocked]);
 
-  const activeQuestionExpiresAt = activeTab === "reading" ? readingExpiresAt : writingExpiresAt;
+  const questionsBySkill = groupBySkill(examData?.questions);
+  const sections = presentSections(questionsBySkill);
+
+  const activeQuestionExpiresAt = sectionExpiresAt[activeTab];
   const questionSecondsLeft = activeQuestionExpiresAt
     ? Math.max(0, Math.ceil((Date.parse(activeQuestionExpiresAt) - questionNow) / 1000))
     : null;
@@ -310,7 +342,7 @@ export default function App() {
    * then either move to the next question in that skill (which the "reach the
    * current question" effect above will start server-side) or, past the last
    * question, hand off to the same Finish action the manual Next button uses
-   * (tab switch for Reading, the submit-confirm modal for Writing).
+   * (the next section's tab, or the submit-confirm modal after the last one).
    *
    * Reads answers via the ref, not the `answers` binding: this can run from the
    * auto-advance effect's closure, whose deps deliberately exclude `answers` —
@@ -319,9 +351,7 @@ export default function App() {
   const goToNextQuestion = (tab: ExamTab) => {
     if (!examData) return;
     const questions = examData.questions.filter((q) => q.skill === tab);
-    const index = tab === "reading" ? readingIndex : writingIndex;
-    const setIndex = tab === "reading" ? setReadingIndex : setWritingIndex;
-    const setExpiresAt = tab === "reading" ? setReadingExpiresAt : setWritingExpiresAt;
+    const index = sectionIndex[tab];
 
     const list = toAnswerList(answersRef.current);
     if (list.length) {
@@ -330,15 +360,16 @@ export default function App() {
 
     const next = questions[index + 1];
     if (!next) {
-      if (tab === "reading") setActiveTab("writing");
+      const following = nextSection(sections, tab);
+      if (following) setActiveTab(following);
       else setShowSubmitModal(true);
       return;
     }
-    setIndex(index + 1);
+    setIndexFor(tab, index + 1);
     // Cleared immediately (rather than left at the just-expired value) so
     // questionSecondsLeft doesn't briefly still read 0 for the NEW question and
     // cascade into advancing past it too before its own start call resolves.
-    setExpiresAt(null);
+    setExpiresAtFor(tab, null);
   };
 
   // Auto-advance when the ACTIVE question's own clock (not the whole-exam one)
@@ -350,7 +381,7 @@ export default function App() {
     if (questionSecondsLeft !== 0) return;
     goToNextQuestion(activeTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questionSecondsLeft, activeTab, readingIndex, writingIndex, studentInfo, evaluationResult, isBlocked]);
+  }, [questionSecondsLeft, activeTab, sectionIndex, studentInfo, evaluationResult, isBlocked]);
 
   /** Turn a failed /api/exam/start into something the student can act on. */
   const handleStartFailure = (err: unknown) => {
@@ -408,10 +439,9 @@ export default function App() {
     setSecondsLeft(started.remainingSeconds);
     setIsTimerRunning(started.remainingSeconds > 0);
     setActiveTab("reading");
-    setReadingIndex(0);
-    setWritingIndex(0);
-    setReadingExpiresAt(null);
-    setWritingExpiresAt(null);
+    setSectionIndex(ZERO_INDEX);
+    setSectionExpiresAt(NO_EXPIRY);
+    setAudioPlays({});
   };
 
   const clearExamState = () => {
@@ -420,10 +450,9 @@ export default function App() {
     setEvaluationResult(null);
     setSecondsLeft(null);
     setIsTimerRunning(false);
-    setReadingIndex(0);
-    setWritingIndex(0);
-    setReadingExpiresAt(null);
-    setWritingExpiresAt(null);
+    setSectionIndex(ZERO_INDEX);
+    setSectionExpiresAt(NO_EXPIRY);
+    setAudioPlays({});
     clearAttemptToken();
     Object.values(keys).forEach((k) => storage.removeItem(k));
   };
@@ -510,7 +539,11 @@ export default function App() {
     if (!studentInfo || submittingRef.current) return;
     submittingRef.current = true;
     setIsGrading(true);
-    setGradingProgress("Scoring Reading answers...");
+    setGradingProgress(
+      sections.includes("listening")
+        ? "Scoring Reading and Listening answers..."
+        : "Scoring Reading answers..."
+    );
     const t = setTimeout(() => setGradingProgress("Evaluating your writing..."), 2500);
 
     // Read the latest answers via the ref: this runs from stale effect closures
@@ -537,9 +570,6 @@ export default function App() {
       setIsGrading(false);
     }
   };
-
-  const readingQuestions = examData?.questions.filter((q) => q.skill === "reading") ?? [];
-  const writingQuestions = examData?.questions.filter((q) => q.skill === "writing") ?? [];
 
   // ── Pick the active screen ──────────────────────────────────────────────────
   let screen: ReactNode;
@@ -587,19 +617,21 @@ export default function App() {
         setActiveTab={setActiveTab}
         examData={examData}
         examError={examError}
-        readingQuestions={readingQuestions}
-        writingQuestions={writingQuestions}
+        sections={sections}
+        questionsBySkill={questionsBySkill}
         answers={answers}
         updateMcq={updateSelectedKey}
         updateTopic={updateSelectedKey}
         updateText={updateText}
         onSubmitClick={() => setShowSubmitModal(true)}
         onOpenAdmin={() => setIsAdminOpen(true)}
-        readingIndex={readingIndex}
-        writingIndex={writingIndex}
+        sectionIndex={sectionIndex}
         questionSecondsLeft={questionSecondsLeft}
-        onNextReading={() => goToNextQuestion("reading")}
-        onNextWriting={() => goToNextQuestion("writing")}
+        onNext={goToNextQuestion}
+        audioPlays={audioPlays}
+        onPlayRegistered={(audioId, playsUsed) =>
+          setAudioPlays((prev) => ({ ...prev, [audioId]: playsUsed }))
+        }
       />
     );
   }

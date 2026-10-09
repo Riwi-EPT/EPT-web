@@ -1,5 +1,5 @@
-// Login banner. Copy reflects the actual exam scope: Reading + Writing only.
-// (Earlier copy advertised Listening/Speaking/TTS, which this product does not do.)
+// Login banner. Copy reflects the actual exam scope: Reading, Listening (in versions
+// that include it) and Writing. No Speaking/TTS.
 export default function ExamBanner() {
   return (
     <div className="bg-slate-900 p-8 text-white relative overflow-hidden border-b border-slate-800">
@@ -15,7 +15,7 @@ export default function ExamBanner() {
         </h1>
         <p className="text-slate-400 text-xs leading-relaxed max-w-lg font-sans">
           A placement test that measures your <strong>Reading</strong> and <strong>Writing</strong>{" "}
-          proficiency and maps it to a CEFR level (A1–C2).
+          (plus <strong>Listening</strong>, when your version includes it) proficiency and maps it to a CEFR level (A1–C2).
         </p>
       </div>
     </div>

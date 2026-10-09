@@ -430,3 +430,72 @@ describe("App per-question timer", () => {
     expect(screen.getByText(/Question 2 of 2/)).toBeInTheDocument();
   });
 });
+
+describe("App section order with listening", () => {
+  const mcq = (id: number, skill: "reading" | "listening", extra = {}) => ({
+    id,
+    skill,
+    type: "mcq" as const,
+    number: id,
+    prompt: `${skill} question ${id}`,
+    maxPoints: 1,
+    options: [
+      { key: "a", text: "yes" },
+      { key: "b", text: "no" },
+    ],
+    ...extra,
+  });
+  const EXAM_WITH_LISTENING: ExamDTO = {
+    versionCode: "A",
+    versionName: "Version A",
+    questions: [mcq(301, "reading"), mcq(302, "listening"), EXAM.questions[0]],
+    audio: [{ id: 1, title: "Train station", durationSeconds: 20, maxPlays: 2 }],
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    fetchExam.mockReset().mockResolvedValue(EXAM_WITH_LISTENING);
+    checkBlockStatus.mockReset().mockResolvedValue({ blocked: false });
+    startAttempt.mockReset();
+    getAttemptToken.mockReset().mockReturnValue(null);
+    startQuestion.mockReset().mockResolvedValue({ questionExpiresAt: null, remainingSeconds: null });
+    fetchQuestionProgress.mockReset().mockResolvedValue({ progress: [] });
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("orders sections Reading, Listening, Writing and chains Continue between them", async () => {
+    seedInProgressExam(localStorage, 600);
+    const App = await loadAppAt("/");
+    render(<App />);
+    await flush();
+
+    expect(screen.getByRole("button", { name: /Part 1 . Reading/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Part 2 . Listening/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Part 3 . Writing/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Continue to Listening/ }));
+    await flush();
+    expect(screen.getByText("Train station")).toBeInTheDocument();
+    expect(screen.getByText("2 of 2 plays left")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Continue to Writing/ }));
+    await flush();
+    expect(screen.getByPlaceholderText(/Write your response here/)).toBeInTheDocument();
+  });
+
+  it("hides Listening for a version without listening questions", async () => {
+    fetchExam.mockResolvedValue({ ...EXAM_WITH_LISTENING, questions: [mcq(301, "reading"), EXAM.questions[0]], audio: [] });
+    seedInProgressExam(localStorage, 600);
+    const App = await loadAppAt("/");
+    render(<App />);
+    await flush();
+
+    expect(screen.queryByRole("button", { name: /Listening/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Continue to Writing/ })).toBeInTheDocument();
+  });
+});

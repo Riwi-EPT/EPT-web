@@ -1,6 +1,8 @@
 import type {
   AnswerInput,
+  AudioPlaysResponse,
   ExamDTO,
+  PlayAudioResponse,
   QuestionProgressResponse,
   ResultDTO,
   SaveAnswersResponse,
@@ -215,6 +217,39 @@ export function fetchQuestionProgress(): Promise<QuestionProgressResponse> {
   const token = getAttemptToken();
   if (!token) return Promise.reject(new ApiError(0, "No attempt in progress.", null));
   return request(`/api/exam/question/progress?attemptToken=${encodeURIComponent(token)}`);
+}
+
+// ── Listening audio (server-enforced play limit) ─────────────────────────────
+
+/** Spend one play of a track. 409 `plays_exhausted` once the limit is reached. */
+export function registerAudioPlay(audioId: number): Promise<PlayAudioResponse> {
+  const token = getAttemptToken();
+  if (!token) return Promise.reject(new ApiError(0, "No attempt in progress.", null));
+  return request(`/api/exam/audio/${audioId}/play`, {
+    method: "POST",
+    body: JSON.stringify({ attemptToken: token }),
+  });
+}
+
+/** Plays already used in this attempt, so a reload shows the right count. */
+export function fetchAudioPlays(): Promise<AudioPlaysResponse> {
+  const token = getAttemptToken();
+  if (!token) return Promise.reject(new ApiError(0, "No attempt in progress.", null));
+  return request(`/api/exam/audio/plays?attemptToken=${encodeURIComponent(token)}`);
+}
+
+/** The track's bytes. Only served once a play has been registered. */
+export async function fetchAudioBlob(audioId: number): Promise<Blob> {
+  const token = getAttemptToken();
+  if (!token) throw new ApiError(0, "No attempt in progress.", null);
+  const headers: Record<string, string> = {};
+  if (examToken) headers.Authorization = `Bearer ${examToken}`;
+  const res = await fetch(
+    `${API_BASE}/api/exam/audio/${audioId}?attemptToken=${encodeURIComponent(token)}`,
+    { headers }
+  );
+  if (!res.ok) throw new ApiError(res.status, "Could not load the audio.", null);
+  return res.blob();
 }
 
 // ── Anti-cheat email block (anonymous self-service flow) ────────────────────

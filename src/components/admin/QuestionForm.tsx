@@ -30,10 +30,15 @@ export default function QuestionForm({
         <Field label="Skill">
           <select
             value={value.skill}
-            onChange={(e) => set({ skill: e.target.value as Skill })}
+            onChange={(e) => {
+              const skill = e.target.value as Skill;
+              // Listening is MCQ-only; switching to it must not leave an essay behind.
+              set(skill === "listening" ? { skill, type: "mcq" } : { skill });
+            }}
             className="form-input"
           >
             <option value="reading">reading</option>
+            <option value="listening">listening</option>
             <option value="writing">writing</option>
           </select>
         </Field>
@@ -41,6 +46,7 @@ export default function QuestionForm({
           <select
             value={value.type}
             onChange={(e) => set({ type: e.target.value as QuestionType })}
+            disabled={value.skill === "listening"}
             className="form-input"
           >
             <option value="mcq">mcq</option>
@@ -71,6 +77,12 @@ export default function QuestionForm({
         <Field label="Passage (optional, reading)">
           <textarea value={value.passageText ?? ""} onChange={(e) => set({ passageText: e.target.value })} rows={3} className="form-input" />
         </Field>
+      )}
+
+      {value.skill === "listening" && (
+        <p className="text-[11px] text-slate-500">
+          Listening questions refer to the exam's fixed audio. Turn Listening on for the version in the sidebar.
+        </p>
       )}
 
       {isEssay && (

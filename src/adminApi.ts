@@ -1,4 +1,10 @@
-import type { AdminQuestionDTO, AdminVersionDTO } from "@riwi-ept/shared";
+import type {
+  AdminAttemptDetailDTO,
+  AdminQuestionDTO,
+  AdminResultHistoryDTO,
+  AdminResultsPageDTO,
+  AdminVersionDTO,
+} from "@riwi-ept/shared";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -38,7 +44,7 @@ export const createVersion = (code: string, name: string, durationSeconds?: numb
   });
 export const updateVersion = (
   id: number,
-  fields: { code?: string; name?: string; durationSeconds?: number }
+  fields: { code?: string; name?: string; durationSeconds?: number; listeningEnabled?: boolean }
 ) =>
   req<{ ok: true }>(`/api/admin/versions/${id}`, {
     method: "PUT",
@@ -65,7 +71,7 @@ export const deleteQuestion = (id: number) =>
 // shapes live on each side, so an admin feature doesn't force a publish of the shared
 // package. Keep the two copies in step.
 
-export const EXAM_BUNDLE_FORMAT_VERSION = 1;
+export const EXAM_BUNDLE_FORMAT_VERSION = 2;
 
 export interface BundleOption {
   key: string;
@@ -92,6 +98,8 @@ export interface BundleVersion {
   code: string;
   name: string;
   durationSeconds: number;
+  /** Absent in format 1 files (read as false). */
+  listeningEnabled?: boolean;
   questions: BundleQuestion[];
 }
 
@@ -130,3 +138,29 @@ export interface BlockedEmailDTO {
 export const listBlockedEmails = () => req<BlockedEmailDTO[]>("/api/admin/blocked-emails");
 export const unblockEmail = (id: number) =>
   req<{ ok: true }>(`/api/admin/blocked-emails/${id}`, { method: "DELETE" });
+
+// ── Results & history ─────────────────────────────────────────────────────────
+
+export interface ResultFilters {
+  q?: string;
+  version?: string;
+  /** ISO date (YYYY-MM-DD), inclusive. */
+  from?: string;
+  /** ISO date (YYYY-MM-DD), inclusive. */
+  to?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export const listResults = (filters: ResultFilters = {}) => {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(filters)) {
+    if (v !== undefined && v !== "") params.set(k, String(v));
+  }
+  const qs = params.toString();
+  return req<AdminResultsPageDTO>(`/api/admin/results${qs ? `?${qs}` : ""}`);
+};
+export const getResultHistory = (identity: string) =>
+  req<AdminResultHistoryDTO>(`/api/admin/results/history?identity=${encodeURIComponent(identity)}`);
+export const getResultDetail = (attemptId: number) =>
+  req<AdminAttemptDetailDTO>(`/api/admin/results/${attemptId}`);
