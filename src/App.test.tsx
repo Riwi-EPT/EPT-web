@@ -60,9 +60,11 @@ const EXAM: ExamDTO = {
 
 const RESULT: ResultDTO = {
   studentInfo: { name: "Ada", email: "ada@x.co" },
-  reading: { score: 0, max: 0, percentage: 0 },
-  writing: { score: 10, max: 20, tasks: [] },
+  reading: { score: 0, max: 0, percentage: 0, cefr: null, band: null },
+  writing: { score: 10, max: 20, percentage: 50, cefr: "B1", band: 6, tasks: [] },
   overall: { score: 10, max: 20, percentage: 50, cefr: "B1", band: 6 },
+  provisional: false,
+  scoringVersion: 2,
   summary: "ok",
 };
 
