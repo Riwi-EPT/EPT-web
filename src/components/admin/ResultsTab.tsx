@@ -318,7 +318,8 @@ export default function ResultsTab({ setError }: { setError: (msg: string | null
               <div className="flex justify-between font-semibold text-slate-800">
                 <span>Task {t.number}</span>
                 <span className="font-mono text-slate-500">
-                  {t.score}/{t.max} · CEFR {t.cefr}
+                  {t.score}/{t.max}
+                  {t.cefr != null ? ` · CEFR ${t.cefr}` : ""}
                 </span>
               </div>
               {(t.grader || t.modelCefr) && (

@@ -130,4 +130,21 @@ describe("ResultsTab", () => {
     expect(panel).toHaveTextContent("model B2");
     expect(panel).toHaveTextContent("CEFR B2 · band 4");
   });
+
+  it("omits the task CEFR when the version issued none", async () => {
+    const task = { ...DETAIL.writing!.tasks[0], cefr: null, modelCefr: null };
+    getResultDetail.mockResolvedValue({
+      ...DETAIL,
+      reading: { ...DETAIL.reading, cefr: null, band: null },
+      writing: { ...DETAIL.writing!, cefr: null, band: null, tasks: [task] },
+      overall: { ...DETAIL.overall, cefr: null, band: null },
+    });
+    render(<ResultsTab setError={vi.fn()} />);
+    fireEvent.click(await screen.findByText("ana@example.com"));
+
+    const panel = await screen.findByLabelText("Attempt detail");
+    expect(panel).toHaveTextContent("6/10");
+    expect(panel).not.toHaveTextContent("null");
+    expect(panel).not.toHaveTextContent(/CEFR/);
+  });
 });
