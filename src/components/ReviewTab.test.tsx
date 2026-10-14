@@ -54,9 +54,9 @@ describe("ReviewTab", () => {
     expect(screen.getByText(/does not issue a CEFR level/)).toBeInTheDocument();
   });
 
-  it("flags a provisional result without revealing the grader or feedback", () => {
+  it("shows no provisional notice to the student, nor the grader or feedback", () => {
     render(<ReviewTab result={{ ...base, provisional: true }} onReset={vi.fn()} />);
-    expect(screen.getByRole("status")).toHaveTextContent(/Provisional result/);
+    expect(screen.queryByText(/provisional/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/heuristic/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Secret/)).not.toBeInTheDocument();
   });

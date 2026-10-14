@@ -1,5 +1,5 @@
 import type { ResultDTO } from "@riwi-ept/shared";
-import { Award, Printer, RefreshCw, BookOpen, FileText, Headphones, Info } from "lucide-react";
+import { Award, Printer, RefreshCw, BookOpen, FileText, Headphones } from "lucide-react";
 
 interface ReviewTabProps {
   result: ResultDTO;
@@ -48,8 +48,7 @@ export function ScoreBar({ label, score, max, percentage, icon, cefr, band }: {
 
 export default function ReviewTab({ result, onReset }: ReviewTabProps) {
   const { studentInfo, reading, listening, writing, overall } = result;
-  // Results stored before the scoring redesign lack `provisional` and per-section levels.
-  const provisional = result.provisional === true;
+  // Results stored before the scoring redesign lack per-section levels.
   const issuesLevel = overall.cefr != null;
   const issuedDate = studentInfo.date ?? new Date().toLocaleDateString();
 
@@ -96,19 +95,6 @@ export default function ReviewTab({ result, onReset }: ReviewTabProps) {
           </div>
         </div>
       </div>
-
-      {provisional && (
-        <div
-          role="status"
-          className="flex items-start gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 print:p-2"
-        >
-          <Info size={14} className="shrink-0 mt-0.5" />
-          <span>
-            <strong>Provisional result.</strong> Your writing was scored automatically and may be reviewed;
-            your level can change after review.
-          </span>
-        </div>
-      )}
 
       {/* Section scores — column count forced even at print width (paper width falls below `md`) */}
       <div
