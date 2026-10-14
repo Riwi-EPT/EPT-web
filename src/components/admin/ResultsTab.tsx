@@ -40,6 +40,8 @@ export default function ResultsTab({ setError }: { setError: (msg: string | null
   const [data, setData] = useState<AdminResultsPageDTO | null>(null);
   const [history, setHistory] = useState<{ identity: string; attempts: AdminResultRowDTO[] } | null>(null);
   const [detail, setDetail] = useState<AdminAttemptDetailDTO | null>(null);
+  // Listening is per version: show the column only when a listed attempt had it.
+  const showListening = data?.rows.some((r) => r.listening != null) ?? false;
 
   const load = useCallback(async () => {
     setData(await listResults({ ...filters, page, pageSize: PAGE_SIZE }));
@@ -140,7 +142,7 @@ export default function ResultsTab({ setError }: { setError: (msg: string | null
                 <th className="text-left px-3 py-2">Version</th>
                 <th className="text-left px-3 py-2">Submitted</th>
                 <th className="text-right px-3 py-2">Reading</th>
-                <th className="text-right px-3 py-2">Listening</th>
+                {showListening && <th className="text-right px-3 py-2">Listening</th>}
                 <th className="text-right px-3 py-2">Writing</th>
                 <th className="text-right px-3 py-2">Overall</th>
                 <th className="text-left px-3 py-2">CEFR</th>
@@ -161,7 +163,7 @@ export default function ResultsTab({ setError }: { setError: (msg: string | null
                   <td className="px-3 py-2">{r.versionCode}</td>
                   <td className="px-3 py-2 text-slate-500">{formatDate(r.submittedAt)}</td>
                   <td className="px-3 py-2 text-right font-mono">{sectionCell(r.reading)}</td>
-                  <td className="px-3 py-2 text-right font-mono">{sectionCell(r.listening)}</td>
+                  {showListening && <td className="px-3 py-2 text-right font-mono">{sectionCell(r.listening)}</td>}
                   <td className="px-3 py-2 text-right font-mono">{sectionCell(r.writing)}</td>
                   <td className="px-3 py-2 text-right font-mono">
                     {r.overallPercentage != null ? `${r.overallPercentage}%` : "—"}

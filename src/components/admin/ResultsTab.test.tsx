@@ -112,6 +112,26 @@ describe("ResultsTab", () => {
     expect(panel).toHaveTextContent("Good structure.");
   });
 
+  it("hides the Listening column when no listed attempt had listening", async () => {
+    listResults.mockResolvedValue({ rows: [row(2)], total: 1, page: 1, pageSize: 25 });
+    render(<ResultsTab setError={vi.fn()} />);
+    await screen.findByText("ana@example.com");
+    expect(screen.queryByRole("columnheader", { name: "Listening" })).not.toBeInTheDocument();
+  });
+
+  it("shows the Listening column when a listed attempt had listening", async () => {
+    listResults.mockResolvedValue({
+      rows: [row(2, { listening: { score: 1, max: 2, percentage: 50 } }), row(3)],
+      total: 2,
+      page: 1,
+      pageSize: 25,
+    });
+    render(<ResultsTab setError={vi.fn()} />);
+    await screen.findAllByText("ana@example.com");
+    expect(screen.getByRole("columnheader", { name: "Listening" })).toBeInTheDocument();
+    expect(screen.getByText("50%")).toBeInTheDocument();
+  });
+
   it("marks provisional rows in the list", async () => {
     listResults.mockResolvedValue({ rows: [row(2, { provisional: true })], total: 1, page: 1, pageSize: 25 });
     render(<ResultsTab setError={vi.fn()} />);
