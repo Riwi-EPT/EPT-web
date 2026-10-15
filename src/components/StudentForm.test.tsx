@@ -53,3 +53,27 @@ describe("StudentForm — server-side block check", () => {
     expect(document.getElementById("cheater-permanently-blocked-warning")).not.toBeInTheDocument();
   });
 });
+
+describe("StudentForm — evaluation date", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    checkBlockStatus.mockReset().mockResolvedValue({ blocked: false });
+  });
+
+  it("has no date field and stamps today's local date on start", async () => {
+    const onStart = vi.fn();
+    render(<StudentForm onStart={onStart} currentVersion="A" />);
+    expect(screen.queryByText(/Evaluation Date/i)).not.toBeInTheDocument();
+    expect(document.querySelector("input[type=date]")).toBeNull();
+
+    fireEvent.change(screen.getByPlaceholderText("e.g., Kate Acosta"), { target: { value: "Ana" } });
+    fireEvent.change(screen.getByPlaceholderText("e.g., student@riwi.co"), { target: { value: "ana@example.com" } });
+    const start = screen.getByRole("button", { name: /Start Placement Test/i });
+    await waitFor(() => expect(start).toBeEnabled());
+    fireEvent.click(start);
+
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ date: today }));
+  });
+});

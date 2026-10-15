@@ -13,6 +13,11 @@ import CooldownNotices from "./login/CooldownNotices";
 // guard only — the authoritative cooldown for LTI identities is enforced server-side
 // (see EPT-api middleware/retakeCooldown). Kept for the anonymous flow, which has no
 // trusted identity to gate on the server.
+// The evaluation date is the day the test starts, in the candidate's local time.
+function localDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 const SELF_SERVICE_COOLDOWN_MS = 72 * 60 * 60 * 1000;
 
 interface StudentFormProps {
@@ -30,7 +35,6 @@ export default function StudentForm({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [teacher, setTeacher] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [agreeTerms, setAgreeTerms] = useState(true);
 
   // Cooldown & attempt tracking (local, this-device — unrelated to the block).
@@ -113,7 +117,7 @@ export default function StudentForm({
     const info: StudentInfo = {
       name: name.trim(),
       email: email.trim().toLowerCase(),
-      date,
+      date: localDate(new Date()),
       teacher: teacher.trim() || "N/A",
       startedAt: null,
     };
@@ -146,11 +150,9 @@ export default function StudentForm({
             name={name}
             email={email}
             teacher={teacher}
-            date={date}
             onName={setName}
             onEmail={setEmail}
             onTeacher={setTeacher}
-            onDate={setDate}
             currentVersion={currentVersion}
             durationMinutes={Math.round((durationSeconds ?? EXAM_DURATION_SECONDS) / 60)}
           />
