@@ -31,6 +31,16 @@ vi.mock("./api", async (importActual) => {
   };
 });
 
+// AdminPanel is replaced by a stub with just a close button: these tests only
+// need to open and close it, not exercise its network calls.
+vi.mock("./components/AdminPanel", () => ({
+  default: ({ onClose }: { onClose: () => void }) => (
+    <button type="button" onClick={onClose}>
+      Close admin stub
+    </button>
+  ),
+}));
+
 // Version-prefixed storage keys mirror lib/examSession.ts (version "A" by default).
 // NOTE: there is no timer key any more — the remaining time comes from the server
 // (POST /api/exam/start), so these tests drive the clock via startAttempt.
@@ -499,5 +509,21 @@ describe("App section order with listening", () => {
 
     expect(screen.queryByRole("button", { name: /Listening/ })).toBeNull();
     expect(screen.getByRole("button", { name: /Continue to Writing/ })).toBeInTheDocument();
+  });
+it("reloads the exam after the admin panel closes, so a newly enabled Listening appears", async () => {
+    fetchExam.mockResolvedValueOnce({ ...EXAM_WITH_LISTENING, questions: [mcq(301, "reading"), EXAM.questions[0]], audio: [] });
+    seedInProgressExam(localStorage, 600);
+    const App = await loadAppAt("/");
+    render(<App />);
+    await flush();
+    expect(screen.queryByRole("button", { name: /Listening/ })).toBeNull();
+
+    // An admin switches Listening on from the panel opened inside the exam.
+    fireEvent.click(screen.getByRole("button", { name: /Panel de Docente/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Close admin stub" }));
+    await flush();
+
+    expect(fetchExam).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("button", { name: /Part 2 . Listening/ })).toBeInTheDocument();
   });
 });

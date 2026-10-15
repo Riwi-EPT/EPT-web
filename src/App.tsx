@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
 import { GraduationCap, ShieldAlert } from "lucide-react";
 import type { StudentInfo } from "./types";
 import type { ExamDTO, ResultDTO, AnswerInput } from "@riwi-ept/shared";
@@ -107,7 +107,7 @@ export default function App() {
   const [ltiError, setLtiError] = useState<string | null>(null);
 
   // Load the sanitized exam from the API (no answer keys ever reach the client)
-  useEffect(() => {
+  const loadExam = useCallback(() => {
     fetchExam(examVersion)
       .then(setExamData)
       .catch((err) => {
@@ -119,6 +119,17 @@ export default function App() {
         }
       });
   }, []);
+
+  useEffect(() => {
+    loadExam();
+  }, [loadExam]);
+
+  // An admin can change the version (e.g. switch Listening on) from the panel
+  // opened inside this page, so reload the exam when it closes.
+  const closeAdmin = () => {
+    setIsAdminOpen(false);
+    loadExam();
+  };
 
   // Verify a resumed session's block status against the server (the block is no
   // longer readable synchronously from storage — see isBlocked above).
@@ -681,7 +692,7 @@ export default function App() {
 
       {isAdminOpen && (
         <AdminPanel
-          onClose={() => setIsAdminOpen(false)}
+          onClose={closeAdmin}
           currentStudentEmail={studentInfo?.email}
           onEmailUnblocked={handleEmailUnblocked}
           onResetCooldown={handleResetCooldown}
