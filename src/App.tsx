@@ -49,6 +49,7 @@ export default function App() {
   const secondsLeftRef = useRef<number | null>(null);
   const [examData, setExamData] = useState<ExamDTO | null>(null);
   const [examError, setExamError] = useState<string | null>(null);
+  const examLoadId = useRef(0);
 
   const [activeTab, setActiveTab] = useState<ExamTab>("reading");
   // null = the server hasn't told us yet. Deliberately NOT seeded from storage:
@@ -108,9 +109,16 @@ export default function App() {
 
   // Load the sanitized exam from the API (no answer keys ever reach the client)
   const loadExam = useCallback(() => {
+    const requestId = ++examLoadId.current;
+    const isCurrent = () => requestId === examLoadId.current;
     fetchExam(examVersion)
-      .then(setExamData)
+      .then((exam) => {
+        if (!isCurrent()) return;
+        setExamData(exam);
+        setExamError(null);
+      })
       .catch((err) => {
+        if (!isCurrent()) return;
         // A 403 here is the server-side retake cooldown (issue #24).
         if (err instanceof ApiError && err.status === 403) {
           setExamError(cooldownMessage(err));
@@ -122,6 +130,7 @@ export default function App() {
 
   useEffect(() => {
     loadExam();
+    return () => { examLoadId.current++; };
   }, [loadExam]);
 
   // An admin can change the version (e.g. switch Listening on) from the panel
@@ -650,6 +659,14 @@ export default function App() {
   // Overlays (modals + admin) render above whichever screen is active.
   return (
     <>
+      {!studentInfo && examError && (
+        <div role="alert" className="p-4 text-sm text-rose-700 bg-rose-50 border border-rose-200">
+          {examError}{" "}
+          <button type="button" onClick={loadExam} className="font-semibold underline cursor-pointer">
+            Retry loading exam
+          </button>
+        </div>
+      )}
       {screen}
 
       {showSubmitModal && (
