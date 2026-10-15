@@ -104,7 +104,7 @@ export default function StudentFields({
             htmlFor="teacher-name-input"
             className="block text-xs font-semibold text-slate-500 uppercase tracking-wider font-mono"
           >
-            Docente u observador
+            Team Leader
           </label>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -113,7 +113,7 @@ export default function StudentFields({
             <input
               id="teacher-name-input"
               type="text"
-              placeholder="ej., Profesor Martínez"
+              placeholder="ej., Laura Gómez"
               value={teacher}
               onChange={(e) => onTeacher(e.target.value)}
               className={inputClass}
