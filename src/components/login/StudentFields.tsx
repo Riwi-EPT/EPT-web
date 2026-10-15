@@ -58,7 +58,7 @@ export default function StudentFields({
             htmlFor="student-name-input"
             className="block text-xs font-semibold text-slate-500 uppercase tracking-wider font-mono"
           >
-            Full Name *
+            Nombre completo *
           </label>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -68,7 +68,7 @@ export default function StudentFields({
               id="student-name-input"
               type="text"
               required
-              placeholder="e.g., Kate Acosta"
+              placeholder="ej., Kate Acosta"
               value={name}
               onChange={(e) => onName(e.target.value)}
               className={inputClass}
@@ -81,7 +81,7 @@ export default function StudentFields({
             htmlFor="student-email-input"
             className="block text-xs font-semibold text-slate-500 uppercase tracking-wider font-mono"
           >
-            Email Address *
+            Correo electrónico *
           </label>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -91,7 +91,7 @@ export default function StudentFields({
               id="student-email-input"
               type="email"
               required
-              placeholder="e.g., student@riwi.co"
+              placeholder="ej., estudiante@riwi.co"
               value={email}
               onChange={(e) => onEmail(e.target.value)}
               className={inputClass}
@@ -104,7 +104,7 @@ export default function StudentFields({
             htmlFor="teacher-name-input"
             className="block text-xs font-semibold text-slate-500 uppercase tracking-wider font-mono"
           >
-            Teacher or Observer
+            Docente u observador
           </label>
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -113,7 +113,7 @@ export default function StudentFields({
             <input
               id="teacher-name-input"
               type="text"
-              placeholder="e.g., Professor Martinez"
+              placeholder="ej., Profesor Martínez"
               value={teacher}
               onChange={(e) => onTeacher(e.target.value)}
               className={inputClass}
@@ -124,10 +124,10 @@ export default function StudentFields({
         <div className="bg-slate-50/70 rounded-lg p-4 border border-slate-100 flex items-start gap-3">
           <Clock className="text-indigo-600 shrink-0 mt-0.5" size={16} />
           <div>
-            <h4 className="text-xs font-bold text-slate-700 font-sans">Official Time Limit</h4>
+            <h4 className="text-xs font-bold text-slate-700 font-sans">Tiempo límite oficial</h4>
             <p className="text-slate-500 text-[11px] mt-1 leading-relaxed font-sans">
-              You will have <strong>{durationMinutes} continuous minutes</strong> once the test
-              starts. When the timer expires, your answers are submitted automatically for grading.
+              Tendrás <strong>{durationMinutes} minutos continuos</strong> desde que inicie la prueba.
+              Cuando se acabe el tiempo, tus respuestas se enviarán automáticamente para calificarlas.
             </p>
           </div>
         </div>

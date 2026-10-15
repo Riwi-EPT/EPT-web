@@ -11,27 +11,27 @@ export default function GuidelinesPanel({ agreeTerms, onAgreeChange }: Guideline
     <>
       <div className="space-y-3">
         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">
-          Important Instructions
+          Instrucciones importantes
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-slate-600 font-sans">
           <div className="p-4 bg-slate-50/70 rounded-lg border border-slate-150">
             <span className="font-bold text-slate-800 block mb-1">📖 Reading</span>
-            Multiple-choice questions on grammar and comprehension, graded automatically against the
-            answer key.
+            Preguntas de selección múltiple de gramática y comprensión, calificadas automáticamente
+            con la clave de respuestas.
           </div>
           <div className="p-4 bg-slate-50/70 rounded-lg border border-slate-150">
             <span className="font-bold text-slate-800 block mb-1">🎧 Listening</span>
-            If your exam includes it: multiple-choice questions about short audio clips. Use
-            headphones. Each clip can only be played a limited number of times, with no rewinding.
+            Si tu examen lo incluye: preguntas de selección múltiple sobre audios cortos. Usa
+            audífonos. Cada audio se puede reproducir un número limitado de veces, sin retroceder.
           </div>
           <div className="p-4 bg-slate-50/70 rounded-lg border border-slate-150">
             <span className="font-bold text-slate-800 block mb-1">✍️ Writing</span>
-            Short essay tasks with a target word count. Write directly in the editor; no microphone
-            is involved.
+            Textos cortos con un número de palabras objetivo. Escribe directamente en el editor; no se
+            usa micrófono.
           </div>
           <div className="p-4 bg-slate-50/70 rounded-lg border border-slate-150">
-            <span className="font-bold text-slate-800 block mb-1">🎓 Automated Grading</span>
-            Your writing is scored against CEFR criteria to place you at a proficiency level (A1–C2).
+            <span className="font-bold text-slate-800 block mb-1">🎓 Calificación automática</span>
+            Tu escritura se califica con criterios del MCER para ubicarte en un nivel (A1–C2).
           </div>
         </div>
       </div>
@@ -48,8 +48,8 @@ export default function GuidelinesPanel({ agreeTerms, onAgreeChange }: Guideline
           htmlFor="agree-checkbox"
           className="text-xs text-slate-600 leading-relaxed select-none cursor-pointer font-sans"
         >
-          I have read the guidelines and certify that I will complete this test with academic
-          integrity, individually, and without help from dictionaries, translators, or other people.
+          He leído las instrucciones y certifico que presentaré esta prueba con integridad académica,
+          de forma individual y sin ayuda de diccionarios, traductores ni otras personas.
         </label>
       </div>
     </>

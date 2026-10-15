@@ -8,14 +8,14 @@ export default function ExamBanner() {
 
       <div className="relative z-10 space-y-2">
         <span className="px-2.5 py-1 bg-indigo-500/20 text-indigo-300 text-[10px] font-mono tracking-widest rounded uppercase font-bold border border-indigo-500/30">
-          Official Assessment Portal
+          Portal oficial de evaluación
         </span>
         <h1 className="text-3xl font-display font-bold text-white leading-tight tracking-tight pt-1">
           English Placement Test
         </h1>
         <p className="text-slate-400 text-xs leading-relaxed max-w-lg font-sans">
-          A placement test that measures your <strong>Reading</strong> and <strong>Writing</strong>{" "}
-          (plus <strong>Listening</strong>, when your version includes it) proficiency and maps it to a CEFR level (A1–C2).
+          Una prueba de nivel que mide tu dominio de <strong>Reading</strong> y <strong>Writing</strong>{" "}
+          (y de <strong>Listening</strong>, cuando tu versión lo incluye) y lo ubica en un nivel MCER (A1–C2).
         </p>
       </div>
     </div>

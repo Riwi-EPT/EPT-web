@@ -18,7 +18,7 @@ describe("StudentForm — server-side block check", () => {
     checkBlockStatus.mockResolvedValue({ blocked: true });
     render(<StudentForm onStart={vi.fn()} currentVersion="A" />);
 
-    fireEvent.change(screen.getByPlaceholderText("e.g., student@riwi.co"), {
+    fireEvent.change(screen.getByPlaceholderText("ej., estudiante@riwi.co"), {
       target: { value: "cheater@example.com" },
     });
 
@@ -26,14 +26,14 @@ describe("StudentForm — server-side block check", () => {
     await waitFor(() =>
       expect(document.getElementById("cheater-permanently-blocked-warning")).toBeInTheDocument()
     );
-    expect(screen.getByRole("button", { name: /Start Placement Test/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Iniciar prueba de nivel/i })).toBeDisabled();
   });
 
   it("does not show the block notice for a clean email", async () => {
     checkBlockStatus.mockResolvedValue({ blocked: false });
     render(<StudentForm onStart={vi.fn()} currentVersion="A" />);
 
-    fireEvent.change(screen.getByPlaceholderText("e.g., student@riwi.co"), {
+    fireEvent.change(screen.getByPlaceholderText("ej., estudiante@riwi.co"), {
       target: { value: "clean@example.com" },
     });
 
@@ -45,7 +45,7 @@ describe("StudentForm — server-side block check", () => {
     checkBlockStatus.mockRejectedValue(new Error("network down"));
     render(<StudentForm onStart={vi.fn()} currentVersion="A" />);
 
-    fireEvent.change(screen.getByPlaceholderText("e.g., student@riwi.co"), {
+    fireEvent.change(screen.getByPlaceholderText("ej., estudiante@riwi.co"), {
       target: { value: "clean@example.com" },
     });
 
@@ -66,9 +66,9 @@ describe("StudentForm — evaluation date", () => {
     expect(screen.queryByText(/Evaluation Date/i)).not.toBeInTheDocument();
     expect(document.querySelector("input[type=date]")).toBeNull();
 
-    fireEvent.change(screen.getByPlaceholderText("e.g., Kate Acosta"), { target: { value: "Ana" } });
-    fireEvent.change(screen.getByPlaceholderText("e.g., student@riwi.co"), { target: { value: "ana@example.com" } });
-    const start = screen.getByRole("button", { name: /Start Placement Test/i });
+    fireEvent.change(screen.getByPlaceholderText("ej., Kate Acosta"), { target: { value: "Ana" } });
+    fireEvent.change(screen.getByPlaceholderText("ej., estudiante@riwi.co"), { target: { value: "ana@example.com" } });
+    const start = screen.getByRole("button", { name: /Iniciar prueba de nivel/i });
     await waitFor(() => expect(start).toBeEnabled());
     fireEvent.click(start);
 
