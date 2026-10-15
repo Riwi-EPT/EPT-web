@@ -510,7 +510,7 @@ describe("App section order with listening", () => {
     expect(screen.queryByRole("button", { name: /Listening/ })).toBeNull();
     expect(screen.getByRole("button", { name: /Continue to Writing/ })).toBeInTheDocument();
   });
-  it("reloads the exam after the admin panel closes, so a newly enabled Listening appears", async () => {
+  it("keeps the current attempt unchanged when the admin panel closes", async () => {
     fetchExam.mockResolvedValueOnce({ ...EXAM_WITH_LISTENING, questions: [mcq(301, "reading"), EXAM.questions[0]], audio: [] });
     seedInProgressExam(localStorage, 600);
     const App = await loadAppAt("/");
@@ -523,8 +523,9 @@ describe("App section order with listening", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close admin stub" }));
     await flush();
 
-    expect(fetchExam).toHaveBeenCalledTimes(2);
-    expect(screen.getByRole("button", { name: /Part 2 . Listening/ })).toBeInTheDocument();
+    expect(fetchExam).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /Listening/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Part 2 . Writing/ })).toBeInTheDocument();
   });
 
   it("only applies the latest exam reload before an attempt starts", async () => {
@@ -577,4 +578,24 @@ describe("App section order with listening", () => {
     expect(screen.getByText("20 minutos continuos")).toBeInTheDocument();
   });
 
+  it("ignores an exam refresh already in flight when a sitting starts", async () => {
+    fetchExam.mockResolvedValueOnce({ ...EXAM_WITH_LISTENING, questions: [mcq(301, "reading"), EXAM.questions[0]], audio: [] });
+    startAttempt.mockResolvedValue({ attemptId: 1, attemptToken: "attempt.jwt.sig", remainingSeconds: 600 });
+    const App = await loadAppAt("/");
+    render(<App />);
+    await flush();
+    let resolveReload!: (exam: ExamDTO) => void;
+    fetchExam.mockImplementationOnce(() => new Promise<ExamDTO>((resolve) => { resolveReload = resolve; }));
+    fireEvent.click(screen.getByRole("button", { name: /Acceso Administrador/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Close admin stub" }));
+    fireEvent.change(screen.getByLabelText(/Nombre completo/), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText(/Correo electrónico/), { target: { value: "ada@x.co" } });
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.submit(screen.getByRole("button", { name: "Iniciar prueba de nivel" }).closest("form")!);
+    await flush();
+    expect(screen.getByRole("button", { name: /Part 2 . Writing/ })).toBeInTheDocument();
+    await act(async () => resolveReload(EXAM_WITH_LISTENING));
+    expect(screen.queryByRole("button", { name: /Listening/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Part 2 . Writing/ })).toBeInTheDocument();
+  });
 });
