@@ -1,15 +1,13 @@
-import { User, Mail, BookOpen, Calendar, Clock } from "lucide-react";
+import { User, Mail, BookOpen, Clock } from "lucide-react";
 
 // The active-version card + student identity inputs + the (accurate) time limit.
 interface StudentFieldsProps {
   name: string;
   email: string;
   teacher: string;
-  date: string;
   onName: (v: string) => void;
   onEmail: (v: string) => void;
   onTeacher: (v: string) => void;
-  onDate: (v: string) => void;
   currentVersion: string;
   durationMinutes: number;
 }
@@ -18,11 +16,9 @@ export default function StudentFields({
   name,
   email,
   teacher,
-  date,
   onName,
   onEmail,
   onTeacher,
-  onDate,
   currentVersion,
   durationMinutes,
 }: StudentFieldsProps) {
@@ -120,27 +116,6 @@ export default function StudentFields({
               placeholder="e.g., Professor Martinez"
               value={teacher}
               onChange={(e) => onTeacher(e.target.value)}
-              className={inputClass}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <label
-            htmlFor="test-date-input"
-            className="block text-xs font-semibold text-slate-500 uppercase tracking-wider font-mono"
-          >
-            Evaluation Date
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-              <Calendar size={15} />
-            </div>
-            <input
-              id="test-date-input"
-              type="date"
-              value={date}
-              onChange={(e) => onDate(e.target.value)}
               className={inputClass}
             />
           </div>
