@@ -179,7 +179,7 @@ export default function StudentForm({
             }`}
           >
             <Award size={16} />
-            Start Placement Test
+            Iniciar prueba de nivel
           </button>
         </form>
       </div>
