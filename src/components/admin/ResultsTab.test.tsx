@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import type { AdminAttemptDetailDTO, AdminResultRowDTO } from "@riwi-ept/shared";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import type { AdminAttemptDetailDTO, AdminResultRowDTO, AdminResultsPageDTO } from "@riwi-ept/shared";
 import ResultsTab from "./ResultsTab";
 
 const listResults = vi.fn();
@@ -65,6 +65,13 @@ const DETAIL: AdminAttemptDetailDTO = {
   summary: "Solid B1.",
 };
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+
 describe("ResultsTab", () => {
   beforeEach(() => {
     listResults.mockReset().mockResolvedValue({ rows: [row(2)], total: 1, page: 1, pageSize: 25 });
@@ -80,6 +87,105 @@ describe("ResultsTab", () => {
     expect(await screen.findByText("ana@example.com")).toBeInTheDocument();
     expect(screen.getByText("80%")).toBeInTheDocument();
     expect(listResults).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
+  });
+
+  it("ignores an older results response after the filters change", async () => {
+    const old = deferred<AdminResultsPageDTO>();
+    listResults.mockReturnValueOnce(old.promise);
+    render(<ResultsTab setError={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/Search by name or email/), { target: { value: "ana" } });
+    fireEvent.click(screen.getByRole("button", { name: /Filter/ }));
+    await screen.findByText("ana@example.com");
+    await act(async () => old.resolve({ rows: [row(1, { email: "stale@example.com" })], total: 1, page: 1, pageSize: 25 }));
+    expect(screen.queryByText("stale@example.com")).not.toBeInTheDocument();
+    expect(screen.getByText("ana@example.com")).toBeInTheDocument();
+  });
+
+  it("ignores failures from superseded results requests", async () => {
+    const old = deferred<AdminResultsPageDTO>();
+    const setError = vi.fn();
+    listResults.mockReturnValueOnce(old.promise);
+    render(<ResultsTab setError={setError} />);
+    fireEvent.click(screen.getByRole("button", { name: /Filter/ }));
+    await screen.findByText("ana@example.com");
+    await act(async () => old.reject(new Error("Stale failure")));
+    expect(setError).not.toHaveBeenCalledWith("Stale failure");
+  });
+
+  it("reports the current results failure and recovers on another filter request", async () => {
+    const setError = vi.fn();
+    listResults.mockRejectedValueOnce(new Error("Results offline"));
+    render(<ResultsTab setError={setError} />);
+    await waitFor(() => expect(setError).toHaveBeenCalledWith("Results offline"));
+    fireEvent.click(screen.getByRole("button", { name: /Filter/ }));
+    await screen.findByText("ana@example.com");
+    expect(setError).toHaveBeenLastCalledWith(null);
+  });
+
+  it("keeps the most recently selected attempt when detail responses arrive out of order", async () => {
+    const old = deferred<AdminAttemptDetailDTO>();
+    listResults.mockResolvedValue({ rows: [row(1, { name: "Old candidate", email: "old@example.com" }), row(2)], total: 2, page: 1, pageSize: 25 });
+    getResultDetail.mockReturnValueOnce(old.promise);
+    render(<ResultsTab setError={vi.fn()} />);
+    fireEvent.click(await screen.findByText("old@example.com"));
+    fireEvent.click(screen.getByText("ana@example.com"));
+    await waitFor(() => expect(screen.getByLabelText("Attempt detail")).toHaveTextContent("Good structure."));
+    await act(async () => old.resolve({ ...DETAIL, studentInfo: { name: "Old candidate", email: "old@example.com" } }));
+    expect(screen.getByLabelText("Attempt detail")).not.toHaveTextContent("Old candidate");
+  });
+
+  it("does not reopen a detail panel closed while its request was pending", async () => {
+    const pending = deferred<AdminAttemptDetailDTO>();
+    getResultDetail.mockReturnValueOnce(pending.promise);
+    render(<ResultsTab setError={vi.fn()} />);
+    fireEvent.click(await screen.findByText("ana@example.com"));
+    fireEvent.click(screen.getByRole("button", { name: "Close detail" }));
+    await act(async () => pending.resolve(DETAIL));
+    expect(screen.queryByLabelText("Attempt detail")).not.toBeInTheDocument();
+  });
+
+  it("keeps the most recently selected candidate history", async () => {
+    const old = deferred<{ identity: string; attempts: AdminResultRowDTO[] }>();
+    listResults.mockResolvedValue({ rows: [row(1, { email: "old@example.com", identity: "old@example.com" }), row(2)], total: 2, page: 1, pageSize: 25 });
+    getResultHistory.mockReturnValueOnce(old.promise);
+    render(<ResultsTab setError={vi.fn()} />);
+    await screen.findByText("old@example.com");
+    fireEvent.click(screen.getAllByRole("button", { name: /2 intentos/ })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /2 intentos/ })[1]);
+    await waitFor(() => expect(screen.getByLabelText("Attempt history")).toHaveTextContent("ana@example.com"));
+    await act(async () => old.resolve({ identity: "old@example.com", attempts: [row(1)] }));
+    expect(screen.getByLabelText("Attempt history")).not.toHaveTextContent("old@example.com");
+  });
+
+  it("ignores pending failures after the results tab unmounts", async () => {
+    const pending = deferred<AdminResultsPageDTO>();
+    const setError = vi.fn();
+    listResults.mockReturnValueOnce(pending.promise);
+    const { unmount } = render(<ResultsTab setError={setError} />);
+    unmount();
+    await act(async () => pending.reject(new Error("Late failure")));
+    expect(setError).not.toHaveBeenCalledWith("Late failure");
+  });
+
+  it("does not reopen a history drawer closed while loading", async () => {
+    const pending = deferred<{ identity: string; attempts: AdminResultRowDTO[] }>();
+    getResultHistory.mockReturnValueOnce(pending.promise);
+    render(<ResultsTab setError={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /2 intentos/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Close history" }));
+    await act(async () => pending.resolve({ identity: "ana@example.com", attempts: [row(2)] }));
+    expect(screen.queryByLabelText("Attempt history")).not.toBeInTheDocument();
+  });
+
+  it("ignores errors from a detail request after its panel closes", async () => {
+    const pending = deferred<AdminAttemptDetailDTO>();
+    const setError = vi.fn();
+    getResultDetail.mockReturnValueOnce(pending.promise);
+    render(<ResultsTab setError={setError} />);
+    fireEvent.click(await screen.findByText("ana@example.com"));
+    fireEvent.click(screen.getByRole("button", { name: "Close detail" }));
+    await act(async () => pending.reject(new Error("Closed panel failed")));
+    expect(setError).not.toHaveBeenCalledWith("Closed panel failed");
   });
 
   it("sends the filters on submit", async () => {

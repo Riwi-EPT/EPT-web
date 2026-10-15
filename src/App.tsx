@@ -49,6 +49,9 @@ export default function App() {
   const secondsLeftRef = useRef<number | null>(null);
   const [examData, setExamData] = useState<ExamDTO | null>(null);
   const [examError, setExamError] = useState<string | null>(null);
+  const examLoadId = useRef(0);
+  const examDataRef = useRef(examData);
+  const examLockedRef = useRef(Boolean(studentInfo));
 
   const [activeTab, setActiveTab] = useState<ExamTab>("reading");
   // null = the server hasn't told us yet. Deliberately NOT seeded from storage:
@@ -108,9 +111,21 @@ export default function App() {
 
   // Load the sanitized exam from the API (no answer keys ever reach the client)
   const loadExam = useCallback(() => {
+    // Keep the loaded question set stable for this sitting, including while the
+    // start handshake is pending. A resumed page still needs its initial fetch.
+    if (examLockedRef.current && examDataRef.current) return;
+    const requestId = ++examLoadId.current;
+    const isCurrent = () => requestId === examLoadId.current &&
+      !(examLockedRef.current && examDataRef.current);
     fetchExam(examVersion)
-      .then(setExamData)
+      .then((exam) => {
+        if (!isCurrent()) return;
+        examDataRef.current = exam;
+        setExamData(exam);
+        setExamError(null);
+      })
       .catch((err) => {
+        if (!isCurrent()) return;
         // A 403 here is the server-side retake cooldown (issue #24).
         if (err instanceof ApiError && err.status === 403) {
           setExamError(cooldownMessage(err));
@@ -122,13 +137,15 @@ export default function App() {
 
   useEffect(() => {
     loadExam();
+    return () => { examLoadId.current++; };
   }, [loadExam]);
 
   // An admin can change the version (e.g. switch Listening on) from the panel
-  // opened inside this page, so reload the exam when it closes.
+  // opened inside this page. Refresh before a sitting, never replace its content
+  // mid-attempt; admin changes are picked up after the current sitting is reset.
   const closeAdmin = () => {
     setIsAdminOpen(false);
-    loadExam();
+    if (!studentInfo) loadExam();
   };
 
   // Verify a resumed session's block status against the server (the block is no
@@ -437,9 +454,11 @@ export default function App() {
     // enforceable deadline, the student stays on the login screen with a retry
     // rather than sitting in an untimed exam.
     let started;
+    examLockedRef.current = true;
     try {
       started = await startAttempt(examVersion, info);
     } catch (err) {
+      examLockedRef.current = false;
       handleStartFailure(err);
       return;
     }
@@ -456,6 +475,7 @@ export default function App() {
   };
 
   const clearExamState = () => {
+    examLockedRef.current = false;
     setStudentInfo(null);
     setAnswers({});
     setEvaluationResult(null);
@@ -466,6 +486,7 @@ export default function App() {
     setAudioPlays({});
     clearAttemptToken();
     Object.values(keys).forEach((k) => storage.removeItem(k));
+    loadExam();
   };
 
   const handleExitBlockedState = () => {
@@ -650,6 +671,14 @@ export default function App() {
   // Overlays (modals + admin) render above whichever screen is active.
   return (
     <>
+      {!studentInfo && examError && (
+        <div role="alert" className="p-4 text-sm text-rose-700 bg-rose-50 border border-rose-200">
+          {examError}{" "}
+          <button type="button" onClick={loadExam} className="font-semibold underline cursor-pointer">
+            Retry loading exam
+          </button>
+        </div>
+      )}
       {screen}
 
       {showSubmitModal && (
