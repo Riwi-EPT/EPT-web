@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import type {
   AdminAttemptDetailDTO,
   AdminResultRowDTO,
@@ -40,36 +40,63 @@ export default function ResultsTab({ setError }: { setError: (msg: string | null
   const [data, setData] = useState<AdminResultsPageDTO | null>(null);
   const [history, setHistory] = useState<{ identity: string; attempts: AdminResultRowDTO[] } | null>(null);
   const [detail, setDetail] = useState<AdminAttemptDetailDTO | null>(null);
+  const [historyIdentity, setHistoryIdentity] = useState<string | null>(null);
+  const [detailAttemptId, setDetailAttemptId] = useState<number | null>(null);
   // Listening is per version: show the column only when a listed attempt had it.
   const showListening = data?.rows.some((r) => r.listening != null) ?? false;
 
-  const load = useCallback(async () => {
-    setData(await listResults({ ...filters, page, pageSize: PAGE_SIZE }));
-  }, [filters, page]);
+  useEffect(() => {
+    let ignore = false;
+    setError(null);
+    listResults({ ...filters, page, pageSize: PAGE_SIZE })
+      .then((results) => { if (!ignore) setData(results); })
+      .catch((e) => { if (!ignore) setError(e instanceof Error ? e.message : String(e)); });
+    return () => { ignore = true; };
+  }, [filters, page, setError]);
 
   useEffect(() => {
-    load().catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  }, [load, setError]);
+    if (historyIdentity === null) return;
+    let ignore = false;
+    setError(null);
+    getResultHistory(historyIdentity)
+      .then((result) => { if (!ignore) setHistory(result); })
+      .catch((e) => {
+        if (ignore) return;
+        setError(e instanceof Error ? e.message : "Could not load the history.");
+        setHistoryIdentity(null);
+      });
+    return () => { ignore = true; };
+  }, [historyIdentity, setError]);
+
+  useEffect(() => {
+    if (detailAttemptId === null) return;
+    let ignore = false;
+    setError(null);
+    getResultDetail(detailAttemptId)
+      .then((result) => { if (!ignore) setDetail(result); })
+      .catch((e) => {
+        if (ignore) return;
+        setError(e instanceof Error ? e.message : "Could not load the result.");
+        setDetailAttemptId(null);
+      });
+    return () => { ignore = true; };
+  }, [detailAttemptId, setError]);
 
   const applyFilters = () => {
     setPage(1);
     setFilters({ ...draft });
   };
 
-  const openHistory = async (row: AdminResultRowDTO) => {
-    try {
-      setHistory(await getResultHistory(row.identity));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load the history.");
-    }
+  const openHistory = (row: AdminResultRowDTO) => {
+    if (historyIdentity === row.identity) return;
+    setHistory(null);
+    setHistoryIdentity(row.identity);
   };
 
-  const openDetail = async (attemptId: number) => {
-    try {
-      setDetail(await getResultDetail(attemptId));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load the result.");
-    }
+  const openDetail = (attemptId: number) => {
+    if (detailAttemptId === attemptId) return;
+    setDetail(null);
+    setDetailAttemptId(attemptId);
   };
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
@@ -227,22 +254,23 @@ export default function ResultsTab({ setError }: { setError: (msg: string | null
       </div>
 
       {/* History drawer */}
-      {history && (
+      {historyIdentity !== null && (
         <aside
           aria-label="Attempt history"
           className="w-80 border-l border-slate-100 p-4 overflow-y-auto space-y-3"
         >
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-700">
-              History · {history.attempts.length} attempts
+              History{history && <> · {history.attempts.length} attempts</>}
             </h3>
-            <button aria-label="Close history" onClick={() => setHistory(null)} className="text-slate-400 cursor-pointer">
+            <button aria-label="Close history" onClick={() => setHistoryIdentity(null)} className="text-slate-400 cursor-pointer">
               <X size={14} />
             </button>
           </div>
-          <p className="text-[10px] text-slate-400 break-all">{history.identity}</p>
+          <p className="text-[10px] text-slate-400 break-all">{historyIdentity}</p>
+          {!history && <p role="status" className="text-xs text-slate-500">Loading history…</p>}
           <ol className="space-y-2">
-            {history.attempts.map((a, i) => (
+            {history?.attempts.map((a, i) => (
               <li key={a.attemptId}>
                 <button
                   onClick={() => openDetail(a.attemptId)}
@@ -265,17 +293,18 @@ export default function ResultsTab({ setError }: { setError: (msg: string | null
       )}
 
       {/* Detail panel */}
-      {detail && (
+      {detailAttemptId !== null && (
         <aside
           aria-label="Attempt detail"
           className="w-96 border-l border-slate-100 p-4 overflow-y-auto space-y-3"
         >
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-700">{detail.studentInfo.name}</h3>
-            <button aria-label="Close detail" onClick={() => setDetail(null)} className="text-slate-400 cursor-pointer">
+            <h3 className="text-sm font-bold text-slate-700">{detail?.studentInfo.name ?? "Attempt detail"}</h3>
+            <button aria-label="Close detail" onClick={() => setDetailAttemptId(null)} className="text-slate-400 cursor-pointer">
               <X size={14} />
             </button>
           </div>
+          {!detail ? <p role="status" className="text-xs text-slate-500">Loading result…</p> : <>
           <p className="text-[10px] text-slate-400">
             {detail.studentInfo.email} · {detail.versionCode} · {formatDate(detail.submittedAt)}
           </p>
@@ -341,6 +370,7 @@ export default function ResultsTab({ setError }: { setError: (msg: string | null
             </div>
           ))}
           <p className="text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-lg p-3">{detail.summary}</p>
+          </>}
         </aside>
       )}
     </div>
