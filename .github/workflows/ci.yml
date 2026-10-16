@@ -7,15 +7,10 @@ on:
 
 permissions:
   contents: read
-  packages: read # install @riwi-ept/shared from GitHub Packages
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      # read:packages for @riwi-ept/shared. GITHUB_TOKEN works if the package grants
-      # this repo read access; otherwise add a NODE_AUTH_TOKEN secret (PAT).
-      NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN || secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

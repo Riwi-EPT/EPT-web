@@ -16,6 +16,8 @@ export default defineConfig(() => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
+        // Vendored contract types (src/contracts), kept under the old package name.
+        '@riwi-ept/shared': path.resolve(__dirname, 'src/contracts/index.ts'),
       },
     },
     server: {
