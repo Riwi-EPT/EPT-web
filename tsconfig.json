@@ -19,7 +19,8 @@
     "strict": true,
     "noEmit": true,
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@riwi-ept/shared": ["./src/contracts/index.ts"]
     }
   },
   "include": ["src", "vite.config.ts"]

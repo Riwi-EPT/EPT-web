@@ -9,9 +9,9 @@ sanitized data from `riwi-api`; it never receives answer keys.
 
 ## Prerequisites
 - Node.js 20+
-- The shared contract is consumed from **GitHub Packages** as `"@riwi-ept/shared": "^0.3.0"` (no
-  longer a `file:` sibling). Installing it requires auth: a GitHub token with `read:packages`
-  exported as `NODE_AUTH_TOKEN` (the repo's `.npmrc` reads it). See `EPT-shared/README.md`.
+- The shared contract types are vendored in `src/contracts/` (imported as `@riwi-ept/shared` via a
+  tsconfig `paths` + Vite alias mapping). No registry auth or token is needed; keep
+  `src/contracts/` identical between EPT-api and EPT-web.
 - `riwi-api` running (default `http://localhost:3000`).
 
 ## Setup
